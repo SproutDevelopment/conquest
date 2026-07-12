@@ -492,9 +492,9 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
     </div>
     <button id="startBtn">Begin campaign</button>
     <div id="metaLine"></div>
-    <div class="ptitle" style="margin-top:16px">Global leaderboards <span class="r">validated server claims</span></div>
+    <div class="ptitle" style="margin-top:16px">Global leaderboards <span class="r">highest online power per username and country</span></div>
     <div id="lbStart"></div>
-    <p class="small" style="text-align:center;margin-top:8px">Leaderboard identity uses your registered username. Commander names remain campaign display names.</p>
+    <p class="small" style="text-align:center;margin-top:8px">Player rankings use registered usernames. Country totals add each user's highest power achieved while playing that country.</p>
   </div>
 </div>
 
@@ -783,9 +783,9 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <div class="sect panel">
         <div class="ptitle">Campaign ledger</div>
         <div class="statgrid" id="statGrid"></div>
-        <div class="ptitle" style="margin-top:16px">Global Hall of Commanders <span class="r">registered usernames · ranked by total validated PP</span></div>
+        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">each username contributes only its highest recorded power</span></div>
         <div class="statgrid" id="lbPlayers"></div>
-        <div class="ptitle" style="margin-top:16px">Global Banner of Nations <span class="r">validated PP summed by starting nation</span></div>
+        <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">sum of each user's highest power for that country</span></div>
         <div class="statgrid" id="lbNations"></div>
       </div>
       <div class="sect panel">
@@ -2078,7 +2078,7 @@ async function flushServerSave(showToast){
     while(saveDirty){
       saveDirty=false;
       const snapshot=JSON.parse(JSON.stringify({S,META}));
-      const result=await gameApi('save',{revision:SERVER_REVISION,state:snapshot});
+      const result=await gameApi('save',{revision:SERVER_REVISION,state:snapshot,leaderboardPower:S?armyPower():0});
       SERVER_REVISION=result.revision;
     }
     const status=$('serverStatus');if(status)status.innerHTML='☁ <span class="grn">Synced</span> as <b class="gold">'+ACCOUNT.username+'</b>.';
@@ -2975,11 +2975,11 @@ async function fetchGlobalBoards(force){
   try{return await GLOBAL_BOARD_PROMISE;}finally{GLOBAL_BOARD_PROMISE=null;}
 }
 function playerBoardHTML(limit){const rows=GLOBAL_BOARDS.players.slice(0,limit||8);
-  if(!rows.length)return'<p class="note">No validated campaigns yet.</p>';
-  return rows.map((r,i)=>'<div class="stat"><div class="k">#'+(i+1)+' '+htmlEscape(r.username)+' · '+fmt(r.campaigns)+' campaign'+(Number(r.campaigns)===1?'':'s')+'</div><div class="v">'+fmt(r.total_pp)+' PP <span class="small">(best '+fmt(r.best_pp)+')</span></div></div>').join('');}
+  if(!rows.length)return'<p class="note">No online player power has been recorded yet.</p>';
+  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+htmlEscape(r.username)+'</div><div class="v">'+fmt(Number(r.best_power)||0)+' power <span class="small">('+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country||'—'))+')</span></div></div>';}).join('');}
 function nationBoardHTML(limit){const rows=GLOBAL_BOARDS.nations.slice(0,limit||8);
-  if(!rows.length)return'<p class="note">No validated campaigns yet.</p>';
-  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country))+' · '+fmt(r.campaigns)+' campaign'+(Number(r.campaigns)===1?'':'s')+'</div><div class="v">'+fmt(r.total_pp)+' PP</div></div>';}).join('');}
+  if(!rows.length)return'<p class="note">No country power has been recorded yet.</p>';
+  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country))+' · '+fmt(r.contributors)+' player'+(Number(r.contributors)===1?'':'s')+'</div><div class="v">'+fmt(Number(r.total_power)||0)+' power</div></div>';}).join('');}
 async function renderBoards(){
   $('lbPlayers').innerHTML='<p class="note">Loading global commanders…</p>';$('lbNations').innerHTML='';
   try{await fetchGlobalBoards(false);$('lbPlayers').innerHTML=playerBoardHTML(8);$('lbNations').innerHTML=nationBoardHTML(8);}
@@ -3201,7 +3201,7 @@ $('startBtn').addEventListener('click',async()=>{
   const doctrines={nocas:$('chNocas').checked,speed:$('chSpeed').checked,tiny:$('chTiny').checked};
   const candidate=newRun(code,doctrines);$('startBtn').disabled=true;
   try{
-    const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines,state:{S:candidate,META}});
+    const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines,state:{S:candidate,META},leaderboardPower:0});
     SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;
     for(let i=0;i<shopLvl('veteran');i++)S.gens.push(makeGeneral(1));save();enterGame();
     const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The server has opened a validated run.','grn');
