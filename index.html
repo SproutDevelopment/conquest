@@ -360,12 +360,20 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 .trial.done button{border-color:#33502c;background:#10190d;color:var(--green-hi)}
 .legend{border-color:#69445e;box-shadow:inset 0 0 20px rgba(155,82,139,.08)}
 
-/* ---------- start screen ---------- */
-#startScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-#startCard{max-width:620px;width:100%;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:26px;
+/* ---------- authentication / start screen ---------- */
+#authScreen,#startScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+#authCard,#startCard{max-width:620px;width:100%;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:26px;
   box-shadow:0 20px 60px rgba(0,0,0,.6)}
-#startCard h1{font-size:26px;letter-spacing:.3em;color:var(--brass);text-align:center}
-#startCard .tag{font-family:var(--disp);font-style:italic;text-align:center;color:var(--dim);margin:8px 0 20px;font-size:14px}
+#authCard h1,#startCard h1{font-size:26px;letter-spacing:.3em;color:var(--brass);text-align:center}
+#authCard .tag,#startCard .tag{font-family:var(--disp);font-style:italic;text-align:center;color:var(--dim);margin:8px 0 20px;font-size:14px}
+.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:0 0 18px;padding:4px;background:var(--sunken);border:1px solid var(--line);border-radius:6px}
+.auth-tabs button{padding:10px;border:1px solid transparent;border-radius:4px;color:var(--dim);font-weight:800;letter-spacing:.14em;background:transparent}
+.auth-tabs button.on{border-color:var(--brass);color:var(--brass-hi);background:rgba(201,162,39,.09)}
+.auth-panel{display:none}
+.auth-panel.on{display:block}
+.auth-submit{width:100%;padding:12px;border:1px solid var(--brass);border-radius:5px;background:linear-gradient(#3f3312,#2c240c);color:var(--brass-hi);font-weight:800;letter-spacing:.14em;margin-top:8px}
+.auth-submit:hover{background:linear-gradient(#4c3e16,#332a0e)}
+#authMessage{min-height:22px;margin-top:10px;text-align:center}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;font-weight:700}
 .field select{width:100%}
@@ -415,8 +423,50 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
 </head>
 <body>
 
+<!-- ============ ACCOUNT AUTHENTICATION ============ -->
+<div id="authScreen">
+  <div id="authCard">
+    <h1>IRON MANDATE</h1>
+    <div class="tag">A registered account is required to command, play and save.</div>
+    <div class="auth-tabs" role="tablist" aria-label="Account access">
+      <button id="loginTabBtn" class="on" type="button" role="tab" aria-selected="true" aria-controls="loginPanel">LOG IN</button>
+      <button id="registerTabBtn" type="button" role="tab" aria-selected="false" aria-controls="registerPanel">REGISTER</button>
+    </div>
+
+    <div id="loginPanel" class="auth-panel on" role="tabpanel" aria-labelledby="loginTabBtn">
+      <div class="field">
+        <label for="loginUsername">Username</label>
+        <input id="loginUsername" maxlength="20" autocomplete="username" placeholder="Your username" style="width:100%">
+      </div>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Your password" style="width:100%">
+      </div>
+      <button id="loginBtn" class="auth-submit" type="button">LOG IN</button>
+    </div>
+
+    <div id="registerPanel" class="auth-panel" role="tabpanel" aria-labelledby="registerTabBtn" hidden>
+      <div class="field">
+        <label for="registerUsername">Username</label>
+        <input id="registerUsername" maxlength="20" autocomplete="username" placeholder="3–20 letters, numbers or underscores" style="width:100%">
+      </div>
+      <div class="field">
+        <label for="registerPassword">Password</label>
+        <input id="registerPassword" type="password" minlength="10" maxlength="72" autocomplete="new-password" placeholder="At least 10 characters" style="width:100%">
+      </div>
+      <div class="field">
+        <label for="registerPasswordConfirm">Confirm password</label>
+        <input id="registerPasswordConfirm" type="password" minlength="10" maxlength="72" autocomplete="new-password" placeholder="Enter the same password again" style="width:100%">
+      </div>
+      <button id="registerBtn" class="auth-submit" type="button">CREATE ACCOUNT</button>
+    </div>
+    <p class="small" id="authMessage"></p>
+    <p class="small" style="text-align:center;margin-top:10px">Your account username is permanent and appears on global leaderboards. Your commander name is separate and can be changed in game.</p>
+  </div>
+</div>
+
 <!-- ============ START SCREEN ============ -->
-<div id="startScreen">
+<div id="startScreen" class="hidden">
   <div id="startCard">
     <h1>IRON MANDATE</h1>
     <div class="tag">"One banner over every capital — by rifle, by gold, or by the Dao."</div>
@@ -437,18 +487,14 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <label class="chk"><input type="checkbox" id="chTiny"><span><b>Austere Mandate</b> ×2 PP<div class="d">Recruitment and click power halved for the whole run.</div></span></label>
     </div>
     <div class="field">
-      <label for="playerName">Commander name <span class="small">(for the leaderboards)</span></label>
+      <label for="playerName">Commander name <span class="small">(campaign display only)</span></label>
       <input id="playerName" maxlength="20" style="width:100%" placeholder="Commander">
     </div>
     <button id="startBtn">Begin campaign</button>
     <div id="metaLine"></div>
-    <div class="rowbtns" style="justify-content:center;margin-top:14px">
-      <button class="pill on" id="lbTabP" type="button">👤 Commanders</button>
-      <button class="pill" id="lbTabN" type="button">🌍 Nations</button>
-      <button class="pill" id="lbTabG" type="button">🌐 Global</button>
-    </div>
-    <div class="statgrid" id="lbStart"></div>
-    <p class="small" style="text-align:center;margin-top:8px">Local leaderboards — every commander who prestiges on this device is ranked; nation totals sum every campaign flown under that flag.</p>
+    <div class="ptitle" style="margin-top:16px">Global leaderboards <span class="r">validated server claims</span></div>
+    <div id="lbStart"></div>
+    <p class="small" style="text-align:center;margin-top:8px">Leaderboard identity uses your registered username. Commander names remain campaign display names.</p>
   </div>
 </div>
 
@@ -723,7 +769,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
           <div class="chline" id="chalLine"></div>
           <div class="small" id="throneLine" style="margin-top:8px"></div>
           <button id="prestigeBtn">Claim the mandate</button>
-          <div class="small" style="margin-top:8px">Requires 10 held nations. Full world conquest doubles the claim.</div>
+          <div class="small" style="margin-top:8px">Requires 10 held territories. The server recalculates and validates every claim.</div>
         </div>
       </div>
       <div class="sect panel">
@@ -737,10 +783,9 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <div class="sect panel">
         <div class="ptitle">Campaign ledger</div>
         <div class="statgrid" id="statGrid"></div>
-        <div class="rowbtns" style="margin-top:16px"><button class="pill on" id="recLocal">💾 Local</button><button class="pill" id="recGlobal">🌐 Global</button></div>
-        <div class="ptitle">Hall of Commanders <span class="r">ranked by total PP</span></div>
+        <div class="ptitle" style="margin-top:16px">Global Hall of Commanders <span class="r">registered usernames · ranked by total validated PP</span></div>
         <div class="statgrid" id="lbPlayers"></div>
-        <div class="ptitle" style="margin-top:16px">Banner of Nations <span class="r">summed PP of every campaign flown under each flag</span></div>
+        <div class="ptitle" style="margin-top:16px">Global Banner of Nations <span class="r">validated PP summed by starting nation</span></div>
         <div class="statgrid" id="lbNations"></div>
       </div>
       <div class="sect panel">
@@ -756,38 +801,23 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
         <div class="note" id="codex"></div>
       </div>
       <div class="sect panel">
-        <div class="ptitle">Cloud sync <span class="r">Supabase · cross-device saves &amp; global boards</span></div>
-        <p class="small" id="cloudStatus" style="margin-bottom:9px"></p>
+        <div class="ptitle">Account &amp; server save <span class="r" id="accountUsername"></span></div>
+        <p class="small" id="serverStatus" style="margin-bottom:9px">Authenticated saves sync to the server. This build does not use browser save slots, import strings, or local leaderboards.</p>
         <div class="rowbtns" style="align-items:center">
-          <input id="cloudId" placeholder="account name" maxlength="24" autocomplete="username" style="width:150px">
-          <input id="cloudPin" type="password" placeholder="PIN (4+)" maxlength="24" autocomplete="current-password" style="width:110px">
-          <button class="pill" id="cloudSaveBtn">☁ Save to cloud</button>
-          <button class="pill" id="cloudLoadBtn">⬇ Load from cloud</button>
-          <button class="pill" id="cloudOutBtn">Log out</button>
-        </div>
-        <p class="small">The PIN is bcrypt-verified on the server — nobody can read, overwrite, or post scores as your account without it. Global claims carry your account name; hand-edited saves are barred.</p>
-      </div>
-      <div class="sect panel">
-        <div class="ptitle">Save &amp; options</div>
-        <div class="rowbtns">
-          <button class="pill" id="saveNowBtn">💾 Save now</button>
-          <button class="pill" id="exportBtn">📤 Export save</button>
-          <button class="pill" id="importBtn">📥 Import save</button>
+          <input id="commanderNameIn" maxlength="20" placeholder="Commander name" style="width:170px">
+          <button class="pill" id="commanderSaveBtn">Rename commander</button>
+          <button class="pill" id="saveNowBtn">☁ Sync now</button>
+          <button class="pill" id="logoutBtn">Log out</button>
           <button class="pill" id="soundTgl">🔊 Sound: on</button>
           <button class="pill" id="hcTgl">◐ High contrast</button>
           <button class="pill" id="fontTgl">🔎 Large text</button>
-          <span class="small" style="align-self:center">Save slot:</span>
-          <button class="pill" id="slot1">1</button>
-          <button class="pill" id="slot2">2</button>
-          <button class="pill" id="slot3">3</button>
-          <button class="pill" id="hardResetBtn" style="border-color:#5a2c26;color:var(--blood-hi)">☠ Hard reset</button>
+          <button class="pill" id="hardResetBtn" style="border-color:#5a2c26;color:var(--blood-hi)">☠ Delete account progress</button>
         </div>
-        <p class="small" id="storageNote"></p>
-        <p class="small">Hotkeys: <kbd>R</kbd> mobilize · <kbd>1–7</kbd> switch tabs</p>
+        <p class="small">Hotkeys: <kbd>R</kbd> mobilize · <kbd>1–8</kbd> switch tabs. Closing the tab is safe after the server status reports a successful sync.</p>
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · Pokémon World Step 19 · Galar, Dynamax, Gigantamax and Max Raids · saves live in this browser</footer>
+  <footer>IRON MANDATE · authenticated server saves · global validated leaderboards</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -796,81 +826,75 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
 <div id="toasts"></div>
 <div id="fx"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 "use strict";
 
 const SUPA={
-  url:'https://hlhnreocltxvgqefeiex.supabase.co',   
-  anon:'sb_publishable_2QLAr2ah0-RJ-JL8qDguRQ_UnMnWEGM'  
+  url:'https://hlhnreocltxvgqefeiex.supabase.co',
+  anon:'sb_publishable_2QLAr2ah0-RJ-JL8qDguRQ_UnMnWEGM'
 };
-function cloudOn(){return !!(SUPA.url&&SUPA.anon);}
-async function supaRpc(fn,args){
-  const r=await fetch(SUPA.url.replace(/\/+$/,'')+'/rest/v1/rpc/'+fn,{
-    method:'POST',headers:{'apikey':SUPA.anon,'Authorization':'Bearer '+SUPA.anon,
-    'Content-Type':'application/json'},body:JSON.stringify(args)});
-  return r.json();}
-async function supaLB(){
-  const r=await fetch(SUPA.url.replace(/\/+$/,'')+
-    '/rest/v1/leaderboard?select=player,country,pp&order=pp.desc&limit=500',
-    {headers:{'apikey':SUPA.anon,'Authorization':'Bearer '+SUPA.anon}});
-  return r.json();}
-/* save integrity: casual edits mark the save "tainted" — playable, but barred from global boards */
-function sig(str){let h=2166136261;const x=str+'|IM-guard-7';
-  for(let i=0;i<x.length;i++){h^=x.charCodeAt(i);h=Math.imul(h,16777619);}
-  return (h>>>0).toString(36);}
-function packSave(){const body=JSON.stringify({S,META});
-  return JSON.stringify({b:body,g:sig(body)});}
-function unpackSave(raw){
-  let o;try{o=JSON.parse(raw);}catch(e){return null;}
-  if(o&&o.b!==undefined){let d;try{d=JSON.parse(o.b);}catch(e){return null;}
-    if(sig(o.b)!==o.g&&d.META)d.META.tainted=1;return d;}
-  return o; /* legacy unguarded save */}
-let GLB={rows:null,ts:0,busy:false};
-function fetchGlobal(cb){if(!cloudOn())return cb&&cb(null);
-  if(GLB.rows&&Date.now()-GLB.ts<60000)return cb&&cb(GLB.rows);
-  if(GLB.busy)return;GLB.busy=true;
-  supaLB().then(rows=>{GLB={rows:Array.isArray(rows)?rows:[],ts:Date.now(),busy:false};
-    cb&&cb(GLB.rows);}).catch(()=>{GLB.busy=false;cb&&cb(null);});}
-async function cloudSave(manual){
-  if(!cloudOn()||!META.cloud||!META.cloud.id)return;
-  try{save();
-    const res=await supaRpc('save_cloud',{p_id:META.cloud.id,p_pin:META.cloud.pin,p_data:packSave()});
-    const st=res&&res.status;
-    if(st==='saved'||st==='created'){META.cloudTs=Date.now();updateCloudUI();
-      if(manual)toast('☁ Cloud',st==='created'?'Cloud account created and empire synced.':'Empire synced to the cloud.','grn');}
-    else if(manual)toast('☁ Cloud sync failed',
-      st==='wrong_pin'?'Wrong PIN for that account name.':(st||'server error'),'bad');
-  }catch(e){if(manual)toast('☁ Cloud unreachable','Check your connection!','bad');}}
-async function cloudLoad(){
-  if(!cloudOn())return;
-  const id=($('cloudId').value||'').trim(),pin=$('cloudPin').value||'';
-  if(id.length<3||pin.length<4){toast('☁ Cloud','Account name (3+) and PIN (4+) required.','bad');return;}
-  try{const res=await supaRpc('load_cloud',{p_id:id,p_pin:pin});
-    const st=res&&res.status;
-    if(st==='ok'){
-      showModal('☁ LOAD CLOUD SAVE','<p>Replace everything on this device with the cloud empire of <b>'+id+'</b>?</p>',
-        [{t:'Keep local'},{t:'Load cloud',cls:'danger',fn:()=>{
-          const data=unpackSave(res.data);
-          if(!data||!data.META){toast('☁ Cloud','That save could not be read.','bad');return;}
-          META=Object.assign({},META,data.META);S=data.S||null;
-          META.cloud={id,pin};if(S)S.lastTs=Date.now();save();
-          if(S)enterGame();else showStart();
-          updateCloudUI();toast('☁ Cloud','Empire restored from the cloud.','grn');}}]);}
-    else if(st==='not_found'){META.cloud={id,pin};cloudSave(true);}
-    else toast('☁ Cloud',st==='wrong_pin'?'Wrong PIN for that account name.':(st||'server error'),'bad');
-  }catch(e){toast('☁ Cloud unreachable','rip','bad');}}
-function cloudSubmit(e){
-  if(!cloudOn()||!META.cloud||!META.cloud.id)return;
-  if(META.tainted){toast('🏴 Global boards','This save was modified by hand — claims stay local only.','bad');return;}
-  supaRpc('submit_score',{p_id:META.cloud.id,p_pin:META.cloud.pin,
-    p_country:e.c,p_pp:e.pp,p_planes:e.pl||0,p_time:e.t||0})
-   .then(r=>{if(r&&r.status==='ok')GLB.ts=0;}).catch(()=>{});}
-function updateCloudUI(){const el=$('cloudStatus');if(!el||!el.classList)return;
-  if(!cloudOn()){el.innerHTML='<span class="red">Cloud is off</span> — by Sora, the creator of the game :D ';return;}
-  if(META.cloud&&META.cloud.id)el.innerHTML='☁ Linked as <b class="gold">'+META.cloud.id+'</b> · auto-syncs every 60 s'+
-    (META.tainted?' · <span class="red">save tainted — barred from global boards</span>':'')+
-    (META.cloudTs?' · last sync '+timeFmt((Date.now()-META.cloudTs)/1000)+' ago':'');
-  else el.innerHTML='Cloud is <b class="grn">configured</b>. Pick an account name and PIN, then “Save to cloud” to create it — the account name is your global leaderboard name.';}
+const supabaseClient=window.supabase.createClient(SUPA.url,SUPA.anon,{
+  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
+});
+let ACCOUNT=null,SERVER_REVISION=0,saveDirty=false,saveBusy=false,saveTimer=null;
+let S=null;
+let GLOBAL_BOARDS={players:[],nations:[],loadedAt:0};let GLOBAL_BOARD_PROMISE=null;
+function normalizeUsername(v){return String(v||'').trim().toLowerCase();}
+function usernameEmail(username){return username+'@users.ironmandate.invalid';}
+function authMessage(message,bad){const el=$('authMessage');if(!el)return;el.textContent=message||'';el.classList.toggle('red',!!bad);}
+function setAuthTab(tab){
+  const login=tab!=='register';
+  $('loginTabBtn').classList.toggle('on',login);$('registerTabBtn').classList.toggle('on',!login);
+  $('loginTabBtn').setAttribute('aria-selected',String(login));$('registerTabBtn').setAttribute('aria-selected',String(!login));
+  $('loginPanel').classList.toggle('on',login);$('registerPanel').classList.toggle('on',!login);
+  $('loginPanel').hidden=!login;$('registerPanel').hidden=login;
+  authMessage('');
+  const target=login?$('loginUsername'):$('registerUsername');
+  if(target)setTimeout(()=>target.focus(),0);
+}
+function showAuth(){
+  ACCOUNT=null;S=null;saveDirty=false;
+  $('game').classList.add('hidden');$('startScreen').classList.add('hidden');$('authScreen').classList.remove('hidden');
+  setAuthTab('login');
+}
+async function gameApi(action,payload={}){
+  const sessionResult=await supabaseClient.auth.getSession();
+  const session=sessionResult.data.session;
+  if(!session)throw new Error('Authentication required. Please log in again.');
+  const response=await fetch(SUPA.url.replace(/\/+$/,'')+'/functions/v1/game-api/'+action,{
+    method:'POST',headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(result.error||('Server error '+response.status));
+  return result;
+}
+async function registerAccount(){
+  const username=normalizeUsername($('registerUsername').value),password=$('registerPassword').value,confirmPassword=$('registerPasswordConfirm').value;
+  if(!/^[a-z0-9_]{3,20}$/.test(username)){authMessage('Username must use 3–20 lowercase letters, numbers or underscores.',true);return;}
+  if(password.length<10){authMessage('Password must contain at least 10 characters.',true);return;}
+  if(!confirmPassword){authMessage('Confirm your password before registering.',true);return;}
+  if(password!==confirmPassword){authMessage('Passwords do not match.',true);return;}
+  authMessage('Creating account…');
+  const result=await supabaseClient.auth.signUp({email:usernameEmail(username),password,options:{data:{username}}});
+  if(result.error){authMessage(result.error.message,true);return;}
+  if(!result.data.session){authMessage('Account created, but automatic login is disabled. Disable email confirmation in Supabase Auth settings.',true);return;}
+  await boot();
+}
+async function loginAccount(){
+  const username=normalizeUsername($('loginUsername').value),password=$('loginPassword').value;
+  if(!username||!password){authMessage('Enter both username and password.',true);return;}
+  authMessage('Signing in…');
+  const result=await supabaseClient.auth.signInWithPassword({email:usernameEmail(username),password});
+  if(result.error){authMessage('Incorrect username or password.',true);return;}
+  await boot();
+}
+async function logoutAccount(){
+  if(ACCOUNT){saveDirty=true;await flushServerSave(false);}
+  await supabaseClient.auth.signOut();showAuth();authMessage('Logged out.');
+}
+supabaseClient.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT')showAuth();});
 /* ================= utilities ================= */
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
@@ -883,13 +907,7 @@ function fmt(n){if(!isFinite(n))return'∞';if(n<0)return'-'+fmt(-n);
   const v=n/Math.pow(10,3*t);return (v>=100?v.toFixed(0):v.toFixed(1))+SUF[t];}
 function timeFmt(s){s=Math.floor(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
   return (h?h+'h ':'')+((h||m)?m+'m ':'')+x+'s';}
-const LS_BASE='ironMandateSave_v1';
-let canStore=false;try{const t='__im_t';localStorage.setItem(t,'1');localStorage.removeItem(t);canStore=true;}catch(e){}
-let SLOT='1';if(canStore){try{SLOT=localStorage.getItem('ironMandateSlot')||'1';}catch(e){}}
-function lsKey(){return SLOT==='1'?LS_BASE:LS_BASE+'_s'+SLOT;}
-function switchSlot(n){if(!canStore){toast('💾 Slots need storage','Open the file locally to use save slots.','bad');return;}
-  save();try{localStorage.setItem('ironMandateSlot',String(n));}catch(e){}
-  location.reload();}
+/* Browser storage and save slots intentionally removed: the authenticated server is canonical. */
 
 /* ================= world data ================= */
 const REGIONS=[['EU','Europe'],['AS','Asia'],['AF','Africa'],['AM','Americas'],['OC','Oceania']];
@@ -1855,7 +1873,7 @@ function challengeSpecial(id){const x=SPECIAL_FORMS.find(v=>v.id===id);if(!x||S.
 function zygardeFormName(){const c=S.poke.zygardeCells||0;return c>=100?'Zygarde Complete Forme':c>=50?'Zygarde 50% Forme':c>=10?'Zygarde 10% Forme':'Zygarde Core';}
 function megaZygardeActive(){return !!(META.megaZygardeUnlocked&&S&&S.poke&&S.poke.owned&&S.poke.owned.zygarde);}
 function zygardeChallengeReady(){return (S.poke.zygardeCells||0)>=100&&hasLegend('zygarde')&&totalRivalWins()>=80&&S.poke.worldRank>=10&&SPECIAL_FORMS.every(x=>S.poke.specialForms[x.id]);}
-function beginMegaZygardeGauntlet(){if(!zygardeChallengeReady())return;const r=ppCalc();if(r.pp<1)return;META.pp+=r.pp;META.totPP+=r.pp;META.prestiges++;META.megaZygardePending=1;META.megaZygardeAttempts=(META.megaZygardeAttempts||0)+1;S=null;save();showStart();toast('🧬 ORDER GAUNTLET ARMED','Begin a new campaign. Tiny Army and Bloodless rules are mandatory; automation and battle transformations are forbidden.','bad');}
+async function beginMegaZygardeGauntlet(){if(!zygardeChallengeReady()||ppCalc().pp<1)return;await claimPrestige('gauntlet');}
 function completeMegaZygardeGauntlet(){if(!S.ch.megaZygarde||S.chFail.megaZygarde||S.chFail.nocas)return;META.megaZygardeUnlocked=1;S.poke.owned.zygarde=Math.max(1,S.poke.owned.zygarde||0);S.poke.zygardeCells=100;unlockEnding('megazygarde','Absolute Order');toast('💚 MEGA ZYGARDE UNLOCKED','Absolute Order now dominates every future campaign.','grn');}
 function renderRivals(){if(!$('rivalGrid')||!S||!S.poke)return;$('rivalTotal').textContent=totalRivalWins();$('rivalStreak').textContent=S.poke.rivalStreak||0;$('zygardeCells').textContent=S.poke.zygardeCells||0;$('zygardeCellBar').style.width=(S.poke.zygardeCells||0)+'%';$('zygardeCellText').textContent=(S.poke.zygardeCells||0)>=100?'All 100 Cells assembled. Complete the rival and prestige conditions to challenge Absolute Order.':'Cells form Zygarde at 10%, 50%, and Complete Forme milestones.';$('rivalGrid').innerHTML='';
  for(const r of RIVAL_TEAMS){const req=rivalReq(r),mr=rivalMasteryReq(r),d=document.createElement('div');d.className='rivalcard';d.innerHTML='<div class="hd"><span class="ico">'+r.ico+'</span><span>'+r.n+'</span></div><div class="ds">'+r.d+'</div><div class="req">Wins '+rivalWins(r.id)+' · Rating '+fmt(trainerRating())+' / '+fmt(req)+' · Mastery '+fmt(pokemonMastery())+' / '+fmt(mr)+'</div><button '+(trainerRating()<req||pokemonMastery()<mr?'disabled':'')+'>CHALLENGE RIVAL TEAM</button>';d.querySelector('button').onclick=()=>fightRival(r.id);$('rivalGrid').appendChild(d);}
@@ -2025,8 +2043,7 @@ function renderPokemon(){if(!S||!$('rosterGrid'))return;
   if(!$('rosterGrid').children.length)$('rosterGrid').innerHTML='<p class="note">No partners captured yet. Buy a Poké Ball and search the available encounters.</p>';renderLegends();renderRaids();renderNursery();renderRivals();}
 
 /* ================= state ================= */
-let S=null;
-let META={pp:0,totPP:0,prestiges:0,wins:0,fastWin:0,best:0,shop:{},ach:{},tut:false,sound:true,lifeWon:0,lifeCas:0};
+let META={pp:0,totPP:0,prestiges:0,wins:0,fastWin:0,best:0,shop:{},ach:{},tut:false,sound:true,lifeWon:0,lifeCas:0,commanderName:'Commander'};
 function shopLvl(id){return META.shop[id]||0;}
 function conqCount(){return S?Object.keys(S.conq).length:0;}
 function newRun(code,ch){
@@ -2045,10 +2062,32 @@ function newRun(code,ch){
     poke:{balls:3,bought:0,owned:{},team:[],seen:{},shards:0,evo:{},megaStones:0,mega:{},activeMega:null,megaCooldownUntil:0,zCrystals:0,zActiveUntil:0,zCooldownUntil:0,dmaxBand:false,dmaxEnergy:0,activeDmax:null,dmaxCooldownUntil:0,raidCooldown:0,raidWins:0,teraOrb:false,teraShards:0,teraTypes:{},activeTera:null,teraCooldownUntil:0,battlePoints:0,worldRank:0,champStreak:0,champWins:{},training:{},eggs:[],eggsHatched:0,traits:{},shiny:{},rivalWins:{},rivalStreak:0,specialForms:{},zygardeCells:0,trials:{},legendProgress:{}},badges:{}};
   if(META.megaZygardePending){r.ch.megaZygarde=true;r.ch.nocas=true;r.ch.tiny=true;META.megaZygardePending=0;}r.conq[code]=1;
   return r;}
-function save(){if(S)S.lastTs=Date.now();
-  if(canStore){try{localStorage.setItem(lsKey(),packSave());}catch(e){}}}
-function loadSave(){if(!canStore)return null;
-  try{const raw=localStorage.getItem(lsKey());return raw?unpackSave(raw):null;}catch(e){return null;}}
+function save(){
+  if(!ACCOUNT)return;if(S)S.lastTs=Date.now();saveDirty=true;
+  clearTimeout(saveTimer);saveTimer=setTimeout(()=>{void flushServerSave(false);},500);
+}
+async function flushServerSave(showToast){
+  if(!ACCOUNT)return false;
+  if(saveBusy){
+    while(saveBusy)await new Promise(resolve=>setTimeout(resolve,40));
+    if(saveDirty)return flushServerSave(showToast);
+    return true;
+  }
+  saveBusy=true;let ok=true;
+  try{
+    while(saveDirty){
+      saveDirty=false;
+      const snapshot=JSON.parse(JSON.stringify({S,META}));
+      const result=await gameApi('save',{revision:SERVER_REVISION,state:snapshot});
+      SERVER_REVISION=result.revision;
+    }
+    const status=$('serverStatus');if(status)status.innerHTML='☁ <span class="grn">Synced</span> as <b class="gold">'+ACCOUNT.username+'</b>.';
+    if(showToast)toast('☁ Synced','Progress saved to the server.','grn');
+  }catch(error){ok=false;saveDirty=true;const status=$('serverStatus');if(status)status.innerHTML='<span class="red">Sync failed:</span> '+htmlEscape(error.message);if(showToast)toast('☁ Save failed',error.message,'bad');}
+  finally{saveBusy=false;}
+  if(ok&&saveDirty)return flushServerSave(showToast);
+  return ok;
+}
 
 /* ================= derived math ================= */
 function lawM(){return LAWS[S.law];}
@@ -2389,20 +2428,18 @@ function doPrestige(){const r=ppCalc();if(r.pp<1)return;
     '<p>Dissolve this world and crown a new age. You will bank <span class="big">'+fmt(r.pp)+
     ' PP</span> and keep every Throne Sanctum purchase.</p><p class="small" style="margin-top:8px">Buildings, tech, generals, realm and territories reset. Prestige Points do not.</p>'+seedBox(),
     [{t:'Not yet'},{t:'Prestige',cls:'danger',fn:performPrestige}]);}
-function performPrestige(){const r=ppCalc();
-  const combo=(r.ok.nocas?1:0)+(r.ok.speed?1:0)+(r.ok.tiny?1:0);
-  if(!META.bestCombo||combo>META.bestCombo.n||(combo===META.bestCombo.n&&r.pp>META.bestCombo.pp))
-    META.bestCombo={n:combo,pp:r.pp};
-  META.byCountry=META.byCountry||{};
-  if(!META.byCountry[S.startCode]||r.pp>META.byCountry[S.startCode])META.byCountry[S.startCode]=r.pp;
-  META.lb=META.lb||[];
-  META.lb.push({p:META.player||'Commander',c:S.startCode,pp:r.pp,
-    pl:Object.keys(S.pc||{}).length,t:Math.floor(S.playSec),d:Date.now()});
-  if(META.lb.length>200)META.lb=META.lb.slice(-200);
-  cloudSubmit(META.lb[META.lb.length-1]);
-  META.pp+=r.pp;META.totPP+=r.pp;META.prestiges++;if(r.pp>META.best)META.best=r.pp;
-  S=null;save();showStart();
-  toast('⭐ +'+fmt(r.pp)+' Prestige','The Eternal Throne remembers.','grn');}
+async function claimPrestige(mode){
+  try{
+    saveDirty=true;
+    if(!await flushServerSave(false))throw new Error('The latest save could not be synchronized.');
+    const result=await gameApi('claim-prestige',{revision:SERVER_REVISION,mode:mode||'standard'});
+    SERVER_REVISION=result.revision;META=result.state.META;S=result.state.S;GLOBAL_BOARDS.loadedAt=0;
+    showStart();
+    toast(mode==='gauntlet'?'🧬 ORDER GAUNTLET ARMED':'⭐ +'+fmt(result.awardedPrestige)+' Prestige',
+      mode==='gauntlet'?'Begin a new campaign. Tiny Army and Bloodless rules are mandatory; automation and battle transformations are forbidden.':'The validated claim is now recorded globally.','grn');
+  }catch(error){toast('Prestige rejected',error.message,'bad');}
+}
+async function performPrestige(){await claimPrestige('standard');}
 function buyShop(id){const it=SHOP.find(x=>x.id===id);const l=shopLvl(id);
   if(l>=it.max)return;const c=Math.floor(it.cost(l));if(META.pp<c)return;
   META.pp-=c;META.shop[id]=l+1;sfx('buy');renderShop();updateStatics();save();}
@@ -2923,39 +2960,34 @@ function renderStats(){if(!S)return;const rows=[
   $('statGrid').innerHTML=rows.map(r=>'<div class="stat"><div class="k">'+r[0]+
     '</div><div class="v">'+r[1]+'</div></div>').join('');
   renderBoards();}
-let REC_SRC='l';
-function globalRows(){return (GLB.rows||[]).map(r=>({p:r.player,c:r.country,pp:r.pp}));}
-function renderBoards(){
-  if(REC_SRC==='g'){
-    if(!cloudOn()){$('lbPlayers').innerHTML='<p class="note">Cloud is not configured.</p>';$('lbNations').innerHTML='';return;}
-    if(!GLB.rows){$('lbPlayers').innerHTML='<p class="note">Fetching global boards…</p>';$('lbNations').innerHTML='';fetchGlobal(()=>{});return;}
-    const rows=globalRows();
-    $('lbPlayers').innerHTML=boardHTML('p',rows);
-    $('lbNations').innerHTML=boardHTML('n',rows);return;}
-  $('lbPlayers').innerHTML=boardHTML('p');
-  $('lbNations').innerHTML=boardHTML('n');}
-function lbAgg(rows){const P={},N={};
-  for(const e of (rows||META.lb||[])){
-    const pl=P[e.p]||(P[e.p]={best:0,total:0,runs:0});
-    pl.total+=e.pp;pl.runs++;if(e.pp>pl.best)pl.best=e.pp;
-    const nn=N[e.c]||(N[e.c]={total:0,runs:0});
-    nn.total+=e.pp;nn.runs++;}
-  return{P,N};}
-function boardHTML(kind,rows){const a=lbAgg(rows);
-  if(kind==='p'){
-    const ks=Object.keys(a.P).sort((x,y)=>a.P[y].total-a.P[x].total).slice(0,8);
-    if(!ks.length)return'<p class="note">Prestige a campaign to enter the hall.</p>';
-    return ks.map((k,i)=>'<div class="stat"><div class="k">#'+(i+1)+' '+k+' · '+a.P[k].runs+
-      ' campaign'+(a.P[k].runs>1?'s':'')+'</div><div class="v">'+fmt(a.P[k].total)+
-      ' PP <span class="small">(best '+fmt(a.P[k].best)+')</span></div></div>').join('');}
-  const ks=Object.keys(a.N).sort((x,y)=>a.N[y].total-a.N[x].total).slice(0,8);
-  if(!ks.length)return'<p class="note">No banners raised yet.</p>';
-  return ks.map((k,i)=>'<div class="stat"><div class="k">#'+(i+1)+' '+
-    (BY[k]?BY[k].flag+' '+BY[k].name:k)+' · '+a.N[k].runs+' campaign'+(a.N[k].runs>1?'s':'')+
-    '</div><div class="v">'+fmt(a.N[k].total)+' PP</div></div>').join('');}
+function htmlEscape(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function fetchGlobalBoards(force){
+  if(!force&&GLOBAL_BOARDS.loadedAt&&Date.now()-GLOBAL_BOARDS.loadedAt<60000)return GLOBAL_BOARDS;
+  if(GLOBAL_BOARD_PROMISE)return GLOBAL_BOARD_PROMISE;
+  GLOBAL_BOARD_PROMISE=(async()=>{
+    const results=await Promise.all([
+      supabaseClient.rpc('get_player_leaderboard',{p_limit:50}),
+      supabaseClient.rpc('get_nation_leaderboard',{p_limit:50})
+    ]);
+    if(results[0].error)throw results[0].error;if(results[1].error)throw results[1].error;
+    GLOBAL_BOARDS={players:results[0].data||[],nations:results[1].data||[],loadedAt:Date.now()};return GLOBAL_BOARDS;
+  })();
+  try{return await GLOBAL_BOARD_PROMISE;}finally{GLOBAL_BOARD_PROMISE=null;}
+}
+function playerBoardHTML(limit){const rows=GLOBAL_BOARDS.players.slice(0,limit||8);
+  if(!rows.length)return'<p class="note">No validated campaigns yet.</p>';
+  return rows.map((r,i)=>'<div class="stat"><div class="k">#'+(i+1)+' '+htmlEscape(r.username)+' · '+fmt(r.campaigns)+' campaign'+(Number(r.campaigns)===1?'':'s')+'</div><div class="v">'+fmt(r.total_pp)+' PP <span class="small">(best '+fmt(r.best_pp)+')</span></div></div>').join('');}
+function nationBoardHTML(limit){const rows=GLOBAL_BOARDS.nations.slice(0,limit||8);
+  if(!rows.length)return'<p class="note">No validated campaigns yet.</p>';
+  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country))+' · '+fmt(r.campaigns)+' campaign'+(Number(r.campaigns)===1?'':'s')+'</div><div class="v">'+fmt(r.total_pp)+' PP</div></div>';}).join('');}
+async function renderBoards(){
+  $('lbPlayers').innerHTML='<p class="note">Loading global commanders…</p>';$('lbNations').innerHTML='';
+  try{await fetchGlobalBoards(false);$('lbPlayers').innerHTML=playerBoardHTML(8);$('lbNations').innerHTML=nationBoardHTML(8);}
+  catch(error){$('lbPlayers').innerHTML='<p class="note red">'+htmlEscape(error.message)+'</p>';}
+}
 function updatePrestige(){const r=ppCalc();
   $('ppPot').textContent=fmt(r.pp);
-  $('ppMath').textContent=r.n+' territories^1.4 × doctrines ×'+r.ch+' × planes ×'+Math.pow(2,r.planes)+' ÷ 3';
+  $('ppMath').textContent=r.n+' territories^1.25 × doctrines ×'+r.ch+' × plane multiplier ×'+Math.pow(2.2,r.planes).toFixed(2)+' ÷ 4';
   const cl=$('chalLine');cl.innerHTML='';
   [['nocas','🩸 Bloodless'],['speed','⚡ Lightning'],['tiny','🪶 Austere']].forEach(p=>{
     if(!S.ch[p[0]])return;const s=document.createElement('span');
@@ -3094,39 +3126,25 @@ document.addEventListener('keydown',e=>{if(!S)return;
   if(e.key==='r'||e.key==='R'){doClick();e.preventDefault();return;}
   if(e.key===' '){S.speed=(S.speed===0)?1:0;renderSpeed();e.preventDefault();return;}
   const i=parseInt(e.key,10);if(i>=1&&i<=8)switchTab(TABORDER[i-1]);});
-$('saveNowBtn').addEventListener('click',()=>{save();
-  toast('💾 Saved',canStore?'Progress stored in this browser.':'Storage is blocked here — use Export instead.','');});
+async function updateCommanderNameFrom(value){
+  const name=(String(value||'').trim()||'Commander').slice(0,20);
+  try{const result=await gameApi('set-commander',{commanderName:name});META.commanderName=result.commanderName;$('playerName').value=result.commanderName;$('commanderNameIn').value=result.commanderName;save();if(S)enterGame();}
+  catch(error){toast('Commander name',error.message,'bad');}
+}
+$('loginTabBtn').addEventListener('click',()=>setAuthTab('login'));
+$('registerTabBtn').addEventListener('click',()=>setAuthTab('register'));
+$('loginBtn').addEventListener('click',()=>{void loginAccount();});
+$('registerBtn').addEventListener('click',()=>{void registerAccount();});
+$('loginUsername').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginPassword').focus();});
+$('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')void loginAccount();});
+$('registerUsername').addEventListener('keydown',e=>{if(e.key==='Enter')$('registerPassword').focus();});
+$('registerPassword').addEventListener('keydown',e=>{if(e.key==='Enter')$('registerPasswordConfirm').focus();});
+$('registerPasswordConfirm').addEventListener('keydown',e=>{if(e.key==='Enter')void registerAccount();});
+$('commanderSaveBtn').addEventListener('click',()=>{void updateCommanderNameFrom($('commanderNameIn').value);});
+$('saveNowBtn').addEventListener('click',()=>{saveDirty=true;void flushServerSave(true);});
+$('logoutBtn').addEventListener('click',()=>{void logoutAccount();});
 $('soundTgl').addEventListener('click',()=>{META.sound=!META.sound;
   $('soundTgl').textContent=META.sound?'🔊 Sound: on':'🔇 Sound: off';save();});
-$('exportBtn').addEventListener('click',()=>{save();
-  const code=btoa(unescape(encodeURIComponent(packSave())));
-  showModal('📤 EXPORT SAVE',
-    '<p class="small">Copy this string somewhere safe; paste it into Import here or on another device.</p>'+
-    '<textarea style="width:100%;height:120px;margin-top:8px;background:var(--sunken);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:8px;font-family:var(--mono);font-size:11px" readonly>'+code+'</textarea>',
-    [{t:'Done'}]);
-  setTimeout(()=>{const ta=document.querySelector('#mBody textarea');
-    if(ta){ta.focus();ta.select();}},60);});
-$('importBtn').addEventListener('click',()=>{
-  showModal('📥 IMPORT SAVE',
-    '<p class="small">Paste an exported save string:</p>'+
-    '<textarea id="impTa" style="width:100%;height:120px;margin-top:8px;background:var(--sunken);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:8px;font-family:var(--mono);font-size:11px"></textarea>',
-    [{t:'Cancel'},{t:'Load',fn:()=>{try{
-        const raw=document.getElementById('impTa').value.trim();
-        const data=unpackSave(decodeURIComponent(escape(atob(raw))));
-        if(!data||!data.META)throw 0;
-        META=Object.assign({},META,data.META);S=data.S||null;
-        if(S)S.lastTs=Date.now();save();
-        if(S){enterGame();toast('📥 Save loaded','Welcome back, Sovereign.','grn');}
-        else showStart();
-      }catch(e){toast('📥 Import failed','That string is not a valid save.','bad');}}}]);});
-$('cloudSaveBtn').addEventListener('click',()=>{
-  const id=($('cloudId').value||'').trim(),pin=$('cloudPin').value||'';
-  if(!cloudOn()){updateCloudUI();toast('☁ Cloud is off','Add your Supabase config at the top of the file first.','bad');return;}
-  if(id.length<3||pin.length<4){toast('☁ Cloud','Account name (3+) and PIN (4+) required.','bad');return;}
-  META.cloud={id,pin};META.player=id;cloudSave(true);});
-$('cloudLoadBtn').addEventListener('click',cloudLoad);
-$('cloudOutBtn').addEventListener('click',()=>{META.cloud=null;save();updateCloudUI();
-  toast('☁ Cloud','Logged out on this device. The cloud copy is untouched.','');});
 $('hcTgl').addEventListener('click',()=>{META.hc=!META.hc;
   document.body.classList.toggle('hc',META.hc);save();});
 $('fontTgl').addEventListener('click',()=>{META.bigFont=!META.bigFont;
@@ -3134,30 +3152,23 @@ $('fontTgl').addEventListener('click',()=>{META.bigFont=!META.bigFont;
 $('zIn').addEventListener('click',()=>zoomAt(1/1.35,VB.x+VB.w/2,VB.y+VB.h/2));
 $('zOut').addEventListener('click',()=>zoomAt(1.35,VB.x+VB.w/2,VB.y+VB.h/2));
 $('zReset').addEventListener('click',resetVB);
-$('slot1').addEventListener('click',()=>switchSlot(1));
-$('slot2').addEventListener('click',()=>switchSlot(2));
-$('slot3').addEventListener('click',()=>switchSlot(3));
 $('hardResetBtn').addEventListener('click',()=>{
-  showModal('☠ HARD RESET','<p>Erase <b>everything</b> — the run, all Prestige, every honor. This cannot be undone.</p>',
-    [{t:'Keep my empire'},{t:'Erase all',cls:'danger',fn:()=>{
-      if(canStore){try{localStorage.removeItem(lsKey());}catch(e){}}
-      location.reload();}}]);});
-let LBVIEW='p';
-function renderStartLB(){
-  if(LBVIEW==='g'){$('lbStart').innerHTML=!cloudOn()
-      ?'<p class="note">Cloud is not configured — see the setup comment at the top of this file.</p>'
-      :(GLB.rows?boardHTML('p',globalRows()):'<p class="note">Fetching global commanders…</p>');}
-  else $('lbStart').innerHTML=boardHTML(LBVIEW);
-  $('lbTabP').classList.toggle('on',LBVIEW==='p');
-  $('lbTabN').classList.toggle('on',LBVIEW==='n');
-  $('lbTabG').classList.toggle('on',LBVIEW==='g');}
-function showStart(){$('game').classList.add('hidden');
+  showModal('☠ DELETE ACCOUNT PROGRESS','<p>Erase the active run, all Prestige, upgrades, honors and validated leaderboard scores for this account. The login itself remains available.</p>',
+    [{t:'Keep my empire'},{t:'Erase progress',cls:'danger',fn:async()=>{try{
+      const result=await gameApi('reset',{revision:SERVER_REVISION});SERVER_REVISION=result.revision;META=result.state.META;S=null;GLOBAL_BOARDS.loadedAt=0;showStart();toast('Account reset','All game progress and scores were deleted.','bad');
+    }catch(error){toast('Reset failed',error.message,'bad');}}}]);});
+async function renderStartLB(){
+  $('lbStart').innerHTML='<p class="note">Loading global leaderboards…</p>';
+  try{await fetchGlobalBoards(false);$('lbStart').innerHTML='<div class="ptitle">Commanders</div><div class="statgrid">'+playerBoardHTML(8)+'</div><div class="ptitle" style="margin-top:16px">Nations</div><div class="statgrid">'+nationBoardHTML(8)+'</div>';}
+  catch(error){$('lbStart').innerHTML='<p class="note red">'+htmlEscape(error.message)+'</p>';}
+}
+function showStart(){$('game').classList.add('hidden');$('authScreen').classList.add('hidden');
   $('startScreen').classList.remove('hidden');
   buildCountrySel();updateStartInfo();checkAch();
-  $('playerName').value=META.player||'';renderStartLB();
-  $('metaLine').textContent='⭐ '+fmt(META.pp)+' PP banked · '+META.prestiges+
+  $('playerName').value=META.commanderName||'Commander';void renderStartLB();
+  $('metaLine').textContent='@'+(ACCOUNT?ACCOUNT.username:'—')+' · ⭐ '+fmt(META.pp)+' PP banked · '+META.prestiges+
     ' prestiges · best claim '+fmt(META.best)+' PP · homelands up to T'+startTierCap()+
-    ' unlocked · '+THRONES[throneTier()]+' · slot '+SLOT;}
+    ' unlocked · '+THRONES[throneTier()];}
 function tierUnlockAt(t){return Math.max(0,Math.ceil((t-1)/2));}
 function buildCountrySel(){const sel=$('countrySel');sel.innerHTML='';
   const cap=startTierCap();
@@ -3175,17 +3186,7 @@ function updateStartInfo(){const c=CBY[$('countrySel').value];if(!c)return;
   $('startInfo').textContent='Defense '+fmt(defOf(c))+' · pop '+c.pop+
     'M · home income scales with tier · larger homelands unlock through prestige';}
 $('countrySel').addEventListener('change',updateStartInfo);
-$('lbTabP').addEventListener('click',()=>{LBVIEW='p';renderStartLB();});
-$('lbTabN').addEventListener('click',()=>{LBVIEW='n';renderStartLB();});
-$('lbTabG').addEventListener('click',()=>{LBVIEW='g';renderStartLB();
-  fetchGlobal(()=>{if(LBVIEW==='g')renderStartLB();});});
-$('recLocal').addEventListener('click',()=>{REC_SRC='l';
-  $('recLocal').classList.add('on');$('recGlobal').classList.remove('on');renderBoards();});
-$('recGlobal').addEventListener('click',()=>{REC_SRC='g';
-  $('recGlobal').classList.add('on');$('recLocal').classList.remove('on');
-  fetchGlobal(()=>renderBoards());renderBoards();});
-$('playerName').addEventListener('change',()=>{
-  META.player=($('playerName').value.trim()||'Commander').slice(0,20);save();});
+$('playerName').addEventListener('change',()=>{void updateCommanderNameFrom($('playerName').value);});
 $('seedBtn').addEventListener('click',()=>{
   try{const d=JSON.parse(decodeURIComponent(escape(atob($('seedIn').value.trim()))));
     if(!d||!CBY[d.s])throw 0;
@@ -3194,19 +3195,23 @@ $('seedBtn').addEventListener('click',()=>{
     $('chNocas').checked=!!(d.ch&&d.ch.nocas);$('chSpeed').checked=!!(d.ch&&d.ch.speed);$('chTiny').checked=!!(d.ch&&d.ch.tiny);
     $('seedInfo').innerHTML='⚔ Duel loaded: beat <b class="gold">'+fmt(d.pp)+' PP</b> from '+CBY[d.s].flag+' '+CBY[d.s].name+' ('+(d.pl||0)+' planes, '+timeFmt(d.t||0)+').';
   }catch(e){$('seedInfo').innerHTML='<span class="red">Not a valid campaign seed.</span>';}});
-$('startBtn').addEventListener('click',()=>{
+$('startBtn').addEventListener('click',async()=>{
   const code=$('countrySel').value;
-  if(!CBY[code]||CBY[code].tier>startTierCap()){
-    toast('🔒 Locked homeland','That nation unlocks after more prestiges.','bad');return;}
-  S=newRun(code,{nocas:$('chNocas').checked,speed:$('chSpeed').checked,tiny:$('chTiny').checked});
-  for(let i=0;i<shopLvl('veteran');i++)S.gens.push(makeGeneral(1));
-  save();enterGame();
-  const h=CBY[code];
-  toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The world does not yet know your name.','grn');});
-function enterGame(){$('startScreen').classList.add('hidden');
+  if(!CBY[code]||CBY[code].tier>startTierCap()){toast('🔒 Locked homeland','That nation unlocks after more prestiges.','bad');return;}
+  const doctrines={nocas:$('chNocas').checked,speed:$('chSpeed').checked,tiny:$('chTiny').checked};
+  const candidate=newRun(code,doctrines);$('startBtn').disabled=true;
+  try{
+    const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines,state:{S:candidate,META}});
+    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;
+    for(let i=0;i<shopLvl('veteran');i++)S.gens.push(makeGeneral(1));save();enterGame();
+    const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The server has opened a validated run.','grn');
+  }catch(error){toast('Campaign could not start',error.message,'bad');}
+  finally{$('startBtn').disabled=false;}
+});
+function enterGame(){$('startScreen').classList.add('hidden');$('authScreen').classList.add('hidden');if($('commanderNameIn'))$('commanderNameIn').value=META.commanderName||'Commander';
   $('game').classList.remove('hidden');
   const h=CBY[S.startCode];
-  $('runLbl').textContent=h.flag+' '+h.name+' · run #'+(META.prestiges+1)+
+  $('runLbl').textContent=(META.commanderName||'Commander')+' · '+h.flag+' '+h.name+' · run #'+(META.prestiges+1)+
     (S.ch.nocas?' · 🩸':'')+(S.ch.speed?' · ⚡':'')+(S.ch.tiny?' · 🪶':'');
   awakeShown=null;if(!S.plane)S.plane='earth';
   buildRegionTabs();renderPlaneRow();buildGrid();buildMap();initMapNav();resetVB();renderSpeed();renderBranches();renderLaw();renderBuyRow();renderBuildings();
@@ -3215,7 +3220,7 @@ function enterGame(){$('startScreen').classList.add('hidden');
   switchTab('conquest');
   updateTop();updateCards();updateBuildings();updateTechs();updatePacts();
   updateShop();updateRealmBtn();updatePrestige();renderStats();updateHint();}
-let last=Date.now(),uiAcc=0,slowAcc=0,saveAcc=0,cloudAcc=0;
+let last=Date.now(),uiAcc=0,slowAcc=0,saveAcc=0;
 function renderSpeed(){const w=$('speedRow');if(!w||!S)return;w.innerHTML='';
   [[0,'⏸'],[1,'1×'],[2,'2×'],[4,'4×']].forEach(p=>{const b=document.createElement('button');
     b.textContent=p[1];if((S.speed===undefined?1:S.speed)===p[0])b.classList.add('on');
@@ -3224,7 +3229,6 @@ function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
   raw=clamp(raw,0,5);if(!S)return;updateMegaTimer();updateZTimer();
   let dt=raw*(S.speed===undefined?1:S.speed);
   saveAcc+=raw;if(saveAcc>=15){saveAcc=0;save();}
-  cloudAcc+=raw;if(cloudAcc>=60){cloudAcc=0;cloudSave(false);}
   if(dt<=0){uiAcc+=raw;if(uiAcc>=0.25){uiAcc=0;updateTop();updateCards();updateMap();}return;}
   S.playSec+=dt;
   const rt=rates();
@@ -3255,18 +3259,21 @@ function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
     checkAch();renderStats();renderLaw();updateHint();updateStatics();}
 }
 setInterval(tick,100);
-function boot(){
-  $('storageNote').innerHTML=canStore
-    ?'Autosaves to this browser every 15 s. Closing the tab is safe — up to 8 h of offline gains accrue at half rate.'
-    :'<span class="red">⚠ Browser storage is blocked in this environment, so progress lives in memory only. Download the file and open it locally for autosaving, or use Export before leaving.</span>';
-  const data=loadSave();
+async function boot(){
+  $('game').classList.add('hidden');$('startScreen').classList.add('hidden');$('authScreen').classList.remove('hidden');
+  const sessionResult=await supabaseClient.auth.getSession();
+  if(!sessionResult.data.session){showAuth();return;}
+  let loaded;
+  try{loaded=await gameApi('load');}
+  catch(error){showAuth();authMessage(error.message,true);return;}
+  ACCOUNT={userId:sessionResult.data.session.user.id,username:loaded.username};SERVER_REVISION=loaded.revision||0;
+  const data=loaded.state||null;$('authScreen').classList.add('hidden');authMessage('');
   if(data&&data.META)META=Object.assign({},META,data.META);
+  META.commanderName=loaded.commanderName||META.commanderName||'Commander';delete META.player;delete META.cloud;delete META.cloudTs;delete META.tainted;delete META.lb;delete META.byCountry;
+  if($('accountUsername'))$('accountUsername').textContent='@'+ACCOUNT.username;if($('commanderNameIn'))$('commanderNameIn').value=META.commanderName;
   $('soundTgl').textContent=META.sound?'🔊 Sound: on':'🔇 Sound: off';
   document.body.classList.toggle('hc',!!META.hc);
   document.body.classList.toggle('bigfont',!!META.bigFont);
-  if(META.cloud&&META.cloud.id&&$('cloudId').value!==undefined){
-    $('cloudId').value=META.cloud.id;$('cloudPin').value=META.cloud.pin||'';}
-  updateCloudUI();
   if(data&&data.S){S=data.S;
     S.st=Object.assign({won:0,cas:0,gensLost:0,atk:0,dmg:0,goldE:0,mpRec:0},S.st||{});
     S.rebels=S.rebels||{};S.pacts=S.pacts||{};S.rc=S.rc||{};
@@ -3296,7 +3303,8 @@ function boot(){
       (g.aged>0?vst('Veterans aged out','−'+fmt(g.aged)):'')+'</div>',
       [{t:'Back to war'}]);
   }else showStart();}
-boot();
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&ACCOUNT){saveDirty=true;void flushServerSave(false);}});
+void boot();
 </script>
 </body>
 </html>
