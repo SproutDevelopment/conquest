@@ -328,6 +328,23 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 .pokevisual .image-missing{font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--faint);text-transform:uppercase;text-align:center;padding:4px}
 .evo-stage{font-size:9px;color:var(--green-hi);letter-spacing:.12em;margin-top:2px}
 
+
+/* ---------- online leaderboards ---------- */
+.leaderboard-scroll{
+  max-height:520px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding-right:6px;
+  align-content:start;
+  scrollbar-gutter:stable;
+  overscroll-behavior:contain;
+}
+.leaderboard-scroll .stat{min-height:68px}
+.leaderboard-scroll::-webkit-scrollbar{width:9px}
+.leaderboard-scroll::-webkit-scrollbar-track{background:var(--sunken);border-radius:5px}
+.leaderboard-scroll::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;border:2px solid var(--sunken)}
+.leaderboard-scroll::-webkit-scrollbar-thumb:hover{background:var(--brass)}
+
 /* ---------- stats & achievements ---------- */
 .statgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
 .stat{background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:9px 11px}
@@ -783,10 +800,10 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <div class="sect panel">
         <div class="ptitle">Campaign ledger</div>
         <div class="statgrid" id="statGrid"></div>
-        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">each username contributes only its highest recorded power</span></div>
-        <div class="statgrid" id="lbPlayers"></div>
-        <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">sum of each user's highest power for that country</span></div>
-        <div class="statgrid" id="lbNations"></div>
+        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">top 100 · each username contributes only its highest recorded power</span></div>
+        <div class="statgrid leaderboard-scroll" id="lbPlayers" role="region" aria-label="Top 100 player leaderboard" tabindex="0"></div>
+        <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">all ranked countries · sum of each user's highest power for that country</span></div>
+        <div class="statgrid leaderboard-scroll" id="lbNations" role="region" aria-label="All countries leaderboard" tabindex="0"></div>
       </div>
       <div class="sect panel">
         <div class="ptitle">Honors <span class="r" id="achCount"></span></div>
@@ -2966,23 +2983,23 @@ async function fetchGlobalBoards(force){
   if(GLOBAL_BOARD_PROMISE)return GLOBAL_BOARD_PROMISE;
   GLOBAL_BOARD_PROMISE=(async()=>{
     const results=await Promise.all([
-      supabaseClient.rpc('get_player_leaderboard',{p_limit:50}),
-      supabaseClient.rpc('get_nation_leaderboard',{p_limit:50})
+      supabaseClient.rpc('get_player_leaderboard',{p_limit:100}),
+      supabaseClient.rpc('get_nation_leaderboard',{p_limit:500})
     ]);
     if(results[0].error)throw results[0].error;if(results[1].error)throw results[1].error;
     GLOBAL_BOARDS={players:results[0].data||[],nations:results[1].data||[],loadedAt:Date.now()};return GLOBAL_BOARDS;
   })();
   try{return await GLOBAL_BOARD_PROMISE;}finally{GLOBAL_BOARD_PROMISE=null;}
 }
-function playerBoardHTML(limit){const rows=GLOBAL_BOARDS.players.slice(0,limit||8);
+function playerBoardHTML(limit){const rows=GLOBAL_BOARDS.players.slice(0,limit||100);
   if(!rows.length)return'<p class="note">No online player power has been recorded yet.</p>';
   return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+htmlEscape(r.username)+'</div><div class="v">'+fmt(Number(r.best_power)||0)+' power <span class="small">('+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country||'—'))+')</span></div></div>';}).join('');}
-function nationBoardHTML(limit){const rows=GLOBAL_BOARDS.nations.slice(0,limit||8);
+function nationBoardHTML(limit){const rows=GLOBAL_BOARDS.nations.slice(0,limit||GLOBAL_BOARDS.nations.length);
   if(!rows.length)return'<p class="note">No country power has been recorded yet.</p>';
   return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country))+' · '+fmt(r.contributors)+' player'+(Number(r.contributors)===1?'':'s')+'</div><div class="v">'+fmt(Number(r.total_power)||0)+' power</div></div>';}).join('');}
 async function renderBoards(){
   $('lbPlayers').innerHTML='<p class="note">Loading global commanders…</p>';$('lbNations').innerHTML='';
-  try{await fetchGlobalBoards(false);$('lbPlayers').innerHTML=playerBoardHTML(8);$('lbNations').innerHTML=nationBoardHTML(8);}
+  try{await fetchGlobalBoards(false);$('lbPlayers').innerHTML=playerBoardHTML(100);$('lbNations').innerHTML=nationBoardHTML(GLOBAL_BOARDS.nations.length);}
   catch(error){$('lbPlayers').innerHTML='<p class="note red">'+htmlEscape(error.message)+'</p>';}
 }
 function updatePrestige(){const r=ppCalc();
