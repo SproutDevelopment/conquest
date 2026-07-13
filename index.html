@@ -800,9 +800,9 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <div class="sect panel">
         <div class="ptitle">Campaign ledger</div>
         <div class="statgrid" id="statGrid"></div>
-        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">top 100 · each username contributes only its highest recorded power</span></div>
+        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">top 100 · server-calculated persistent power; temporary boosts excluded</span></div>
         <div class="statgrid leaderboard-scroll" id="lbPlayers" role="region" aria-label="Top 100 player leaderboard" tabindex="0"></div>
-        <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">all ranked countries · sum of each user's highest power for that country</span></div>
+        <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">all ranked countries · sum of each user's highest server-calculated power</span></div>
         <div class="statgrid leaderboard-scroll" id="lbNations" role="region" aria-label="All countries leaderboard" tabindex="0"></div>
       </div>
       <div class="sect panel">
@@ -834,7 +834,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authenticated server saves · global validated leaderboards</footer>
+  <footer>IRON MANDATE · authenticated server saves · server-calculated global leaderboards</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -855,6 +855,7 @@ const supabaseClient=window.supabase.createClient(SUPA.url,SUPA.anon,{
   auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
 });
 let ACCOUNT=null,SERVER_REVISION=0,saveDirty=false,saveBusy=false,saveTimer=null;
+let saveConflict=false,stateVersion=0,lastSavedVersion=0;
 let S=null;
 let GLOBAL_BOARDS={players:[],nations:[],loadedAt:0};let GLOBAL_BOARD_PROMISE=null;
 function normalizeUsername(v){return String(v||'').trim().toLowerCase();}
@@ -871,20 +872,42 @@ function setAuthTab(tab){
   if(target)setTimeout(()=>target.focus(),0);
 }
 function showAuth(){
-  ACCOUNT=null;S=null;saveDirty=false;
+  ACCOUNT=null;S=null;META=defaultMeta();SERVER_REVISION=0;
+  saveDirty=false;saveBusy=false;saveConflict=false;stateVersion=0;lastSavedVersion=0;
+  clearTimeout(saveTimer);saveTimer=null;
   $('game').classList.add('hidden');$('startScreen').classList.add('hidden');$('authScreen').classList.remove('hidden');
   setAuthTab('login');
 }
-async function gameApi(action,payload={}){
+async function gameApi(action,payload={},options={}){
   const sessionResult=await supabaseClient.auth.getSession();
   const session=sessionResult.data.session;
   if(!session)throw new Error('Authentication required. Please log in again.');
-  const response=await fetch(SUPA.url.replace(/\/+$/,'')+'/functions/v1/game-api/'+action,{
-    method:'POST',headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
-    body:JSON.stringify(payload)
-  });
+
+  const controller=new AbortController();
+  const timeoutMs=Math.max(3000,Number(options.timeoutMs)||20000);
+  const timeoutId=setTimeout(()=>controller.abort(),timeoutMs);
+  let response;
+  try{
+    response=await fetch(SUPA.url.replace(/\/+$/,'')+'/functions/v1/game-api/'+action,{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+      signal:controller.signal
+    });
+  }catch(error){
+    if(error&&error.name==='AbortError')throw new Error('The server request timed out. Check your connection and try again.');
+    throw error;
+  }finally{
+    clearTimeout(timeoutId);
+  }
+
   const result=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(result.error||('Server error '+response.status));
+  if(!response.ok){
+    const error=new Error(result.error||('Server error '+response.status));
+    error.status=response.status;
+    error.details=result;
+    throw error;
+  }
   return result;
 }
 async function registerAccount(){
@@ -908,7 +931,14 @@ async function loginAccount(){
   await boot();
 }
 async function logoutAccount(){
-  if(ACCOUNT){saveDirty=true;await flushServerSave(false);}
+  if(ACCOUNT){
+    saveDirty=true;
+    const saved=await flushServerSave(false);
+    if(!saved){
+      toast('Logout paused','Your latest progress has not reached the server. Resolve the sync error or reload before logging out.','bad');
+      return;
+    }
+  }
   await supabaseClient.auth.signOut();showAuth();authMessage('Logged out.');
 }
 supabaseClient.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT')showAuth();});
@@ -2060,7 +2090,12 @@ function renderPokemon(){if(!S||!$('rosterGrid'))return;
   if(!$('rosterGrid').children.length)$('rosterGrid').innerHTML='<p class="note">No partners captured yet. Buy a Poké Ball and search the available encounters.</p>';renderLegends();renderRaids();renderNursery();renderRivals();}
 
 /* ================= state ================= */
-let META={pp:0,totPP:0,prestiges:0,wins:0,fastWin:0,best:0,shop:{},ach:{},tut:false,sound:true,lifeWon:0,lifeCas:0,commanderName:'Commander'};
+function defaultMeta(){return{
+  pp:0,totPP:0,prestiges:0,wins:0,fastWin:0,best:0,
+  shop:{},ach:{},tut:false,sound:true,lifeWon:0,lifeCas:0,
+  commanderName:'Commander'
+};}
+let META=defaultMeta();
 function shopLvl(id){return META.shop[id]||0;}
 function conqCount(){return S?Object.keys(S.conq).length:0;}
 function newRun(code,ch){
@@ -2079,31 +2114,81 @@ function newRun(code,ch){
     poke:{balls:3,bought:0,owned:{},team:[],seen:{},shards:0,evo:{},megaStones:0,mega:{},activeMega:null,megaCooldownUntil:0,zCrystals:0,zActiveUntil:0,zCooldownUntil:0,dmaxBand:false,dmaxEnergy:0,activeDmax:null,dmaxCooldownUntil:0,raidCooldown:0,raidWins:0,teraOrb:false,teraShards:0,teraTypes:{},activeTera:null,teraCooldownUntil:0,battlePoints:0,worldRank:0,champStreak:0,champWins:{},training:{},eggs:[],eggsHatched:0,traits:{},shiny:{},rivalWins:{},rivalStreak:0,specialForms:{},zygardeCells:0,trials:{},legendProgress:{}},badges:{}};
   if(META.megaZygardePending){r.ch.megaZygarde=true;r.ch.nocas=true;r.ch.tiny=true;META.megaZygardePending=0;}r.conq[code]=1;
   return r;}
-function save(){
-  if(!ACCOUNT)return;if(S)S.lastTs=Date.now();saveDirty=true;
-  clearTimeout(saveTimer);saveTimer=setTimeout(()=>{void flushServerSave(false);},500);
+function makeSaveSnapshot(){
+  const json=JSON.stringify({S,META},(key,value)=>{
+    if(typeof value==='number'&&!Number.isFinite(value)){
+      throw new Error('A game value became too large to save safely. Reload the last server save before continuing.');
+    }
+    return value;
+  });
+  return JSON.parse(json);
+}
+function save(markChanged=true){
+  if(!ACCOUNT||saveConflict)return;
+  if(markChanged)stateVersion++;
+  if(S)S.lastTs=Date.now();
+  saveDirty=true;
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{void flushServerSave(false);},500);
 }
 async function flushServerSave(showToast){
-  if(!ACCOUNT)return false;
+  if(!ACCOUNT||saveConflict)return false;
   if(saveBusy){
     while(saveBusy)await new Promise(resolve=>setTimeout(resolve,40));
     if(saveDirty)return flushServerSave(showToast);
-    return true;
+    return !saveConflict;
   }
-  saveBusy=true;let ok=true;
+
+  saveBusy=true;let ok=true,resultPowerText='';
   try{
-    while(saveDirty){
+    while(saveDirty&&!saveConflict){
       saveDirty=false;
-      const snapshot=JSON.parse(JSON.stringify({S,META}));
-      const result=await gameApi('save',{revision:SERVER_REVISION,state:snapshot,leaderboardPower:S?armyPower():0});
+      const snapshotVersion=stateVersion;
+      const snapshot=makeSaveSnapshot();
+      const result=await gameApi('save',{
+        revision:SERVER_REVISION,
+        state:snapshot
+      });
       SERVER_REVISION=result.revision;
+      lastSavedVersion=Math.max(lastSavedVersion,snapshotVersion);
+      if(result.recordedPower!==undefined){
+        GLOBAL_BOARDS.loadedAt=0;
+        resultPowerText=fmt(Number(result.recordedPower)||0);
+      }
     }
-    const status=$('serverStatus');if(status)status.innerHTML='☁ <span class="grn">Synced</span> as <b class="gold">'+ACCOUNT.username+'</b>.';
+
+    const status=$('serverStatus');
+    if(status){
+      const verified=resultPowerText?(' · verified power <b class="gold">'+resultPowerText+'</b>'):'';
+      status.innerHTML='☁ <span class="grn">Synced</span> as <b class="gold">'+ACCOUNT.username+'</b>'+verified+'.';
+    }
     if(showToast)toast('☁ Synced','Progress saved to the server.','grn');
-  }catch(error){ok=false;saveDirty=true;const status=$('serverStatus');if(status)status.innerHTML='<span class="red">Sync failed:</span> '+htmlEscape(error.message);if(showToast)toast('☁ Save failed',error.message,'bad');}
-  finally{saveBusy=false;}
-  if(ok&&saveDirty)return flushServerSave(showToast);
-  return ok;
+  }catch(error){
+    ok=false;
+    const status=$('serverStatus');
+
+    if(error&&error.status===409){
+      saveConflict=true;
+      saveDirty=false;
+      clearTimeout(saveTimer);
+      if(status)status.innerHTML='<span class="red">Save conflict:</span> reload this page to use the canonical server save.';
+      toast('☁ Save conflict','This account changed in another tab or device. Reload before continuing so progress is not overwritten.','bad');
+      if(!$('modalWrap').classList.contains('hidden'))closeModal();
+      showModal('☁ SAVE CONFLICT',
+        '<p>The account was changed in another tab or device. Automatic saving has stopped to prevent overwriting the server copy.</p>'+
+        '<p class="small" style="margin-top:8px">Reload this page to continue from the canonical server save.</p>',
+        [{t:'Reload server save',fn:()=>location.reload()}]);
+    }else{
+      saveDirty=true;
+      if(status)status.innerHTML='<span class="red">Sync failed:</span> '+htmlEscape(error.message);
+      if(showToast)toast('☁ Save failed',error.message,'bad');
+    }
+  }finally{
+    saveBusy=false;
+  }
+
+  if(ok&&saveDirty&&!saveConflict)return flushServerSave(showToast);
+  return ok&&!saveConflict;
 }
 
 /* ================= derived math ================= */
@@ -2498,13 +2583,14 @@ function tryRaid(){if(conqCount()<8||S.tension<25)return;
   sfx('death');}
 
 /* ================= offline ================= */
-function offlineGains(){const dt=clamp((Date.now()-S.lastTs)/1000,0,8*3600);
+function offlineGains(serverSeconds){
+  const dt=clamp(Number(serverSeconds)||0,0,8*3600);
   if(dt<60)return null;const rt=rates(),e=0.5;
   const pre=S.mp;S.mp*=Math.exp(-dt*0.5/lifespan());
   const g={mp:rt.mps*dt*e,gold:rt.gps*dt*e,eq:rt.eps*dt*e,qi:rt.qps*dt*e,mana:rt.mana*dt*e,dt,aged:pre-S.mp};
   S.st.aged=(S.st.aged||0)+g.aged;
   S.mp+=g.mp;S.gold+=g.gold;S.equip+=g.eq;S.qi+=g.qi;S.mana+=g.mana;
-  S.st.mpRec+=g.mp;S.st.goldE+=g.gold;return g;}
+  S.st.mpRec+=g.mp;S.st.goldE+=g.gold;S.lastTs=Date.now();return g;}
 
 /* ================= toasts / modal / fx / audio ================= */
 function toast(title,body,cls){const w=$('toasts');const d=document.createElement('div');
@@ -3118,7 +3204,7 @@ function buildCodex(){$('codex').innerHTML=
  '<p style="margin-top:8px"><b class="red">Occupation resistance.</b> Every territory you hold hardens all remaining defenses by 2.2%, compounding — the world fights back as your empire swells. Each next target is only a step harder than the last, but deep runs become a true campaign; the Throne Sanctum&#39;s permanent multipliers are how future dynasties push further, faster.</p>'+
  '<p style="margin-top:8px"><b class="gold">Armed forces.</b> Infantry is your untrained pool; gold and equipment convert it into branches that fight at ×1.5–×3 weight and carry doctrines — 🎯 Snipers (−40% casualties at 40% share), 🛡️ Armor (raw power), ⚓ Navy (bloc blockades), ✈️ Air Force (doubled siege caps, halved annihilation threshold), 🥷 Special Forces (commanders half as likely to die). Specialists age, bleed and shrink with the army like everyone else.</p>'+
  '<p style="margin-top:8px"><b class="gold">Aging.</b> Soldiers serve ~10 minutes before retiring or dying of old age, so a standing army settles at roughly <span class="num">income × lifespan</span> — stockpiles melt, economies endure. Every cultivation realm stretches troop lifespan (×1.5 → ×15 at Immortal Ascension), which is the Dao&#39;s true gift to the rank and file. Aging never voids the Bloodless Mandate. The grimoire now holds seven spells, including Summoning Circles (×2 power), Reality Anchors (freeze all repairs) and Teleportation Legions (triple the next conquest).</p>'+
- '<p style="margin-top:8px"><b class="stl">Idle.</b> Production runs while the tab is open; with browser storage available the game autosaves and grants up to 8 h of offline gains at half rate.</p>';}
+ '<p style="margin-top:8px"><b class="stl">Saving.</b> Changed progress syncs to the server within 5 seconds, after gameplay actions, when the tab is hidden, and when you press Sync now. Offline gains remain capped at 8 h at half rate.</p>';}
 
 /* ================= navigation / boot ================= */
 const TABORDER=['conquest','build','generals','magic','cult','pokemon','prestige','stats','help'];
@@ -3159,7 +3245,14 @@ $('registerUsername').addEventListener('keydown',e=>{if(e.key==='Enter')$('regis
 $('registerPassword').addEventListener('keydown',e=>{if(e.key==='Enter')$('registerPasswordConfirm').focus();});
 $('registerPasswordConfirm').addEventListener('keydown',e=>{if(e.key==='Enter')void registerAccount();});
 $('commanderSaveBtn').addEventListener('click',()=>{void updateCommanderNameFrom($('commanderNameIn').value);});
-$('saveNowBtn').addEventListener('click',()=>{saveDirty=true;void flushServerSave(true);});
+$('saveNowBtn').addEventListener('click',async()=>{
+  saveDirty=true;
+  const ok=await flushServerSave(true);
+  if(ok){
+    GLOBAL_BOARDS.loadedAt=0;
+    if(!$('tab-stats').classList.contains('hidden'))await renderBoards();
+  }
+});
 $('logoutBtn').addEventListener('click',()=>{void logoutAccount();});
 $('soundTgl').addEventListener('click',()=>{META.sound=!META.sound;
   $('soundTgl').textContent=META.sound?'🔊 Sound: on':'🔇 Sound: off';save();});
@@ -3177,8 +3270,16 @@ $('hardResetBtn').addEventListener('click',()=>{
     }catch(error){toast('Reset failed',error.message,'bad');}}}]);});
 async function renderStartLB(){
   $('lbStart').innerHTML='<p class="note">Loading global leaderboards…</p>';
-  try{await fetchGlobalBoards(false);$('lbStart').innerHTML='<div class="ptitle">Commanders</div><div class="statgrid">'+playerBoardHTML(8)+'</div><div class="ptitle" style="margin-top:16px">Nations</div><div class="statgrid">'+nationBoardHTML(8)+'</div>';}
-  catch(error){$('lbStart').innerHTML='<p class="note red">'+htmlEscape(error.message)+'</p>';}
+  try{
+    await fetchGlobalBoards(false);
+    $('lbStart').innerHTML=
+      '<div class="ptitle">Top 100 Commanders</div>'+
+      '<div class="statgrid leaderboard-scroll">'+playerBoardHTML(100)+'</div>'+
+      '<div class="ptitle" style="margin-top:16px">All Ranked Countries</div>'+
+      '<div class="statgrid leaderboard-scroll">'+nationBoardHTML(GLOBAL_BOARDS.nations.length)+'</div>';
+  }catch(error){
+    $('lbStart').innerHTML='<p class="note red">'+htmlEscape(error.message)+'</p>';
+  }
 }
 function showStart(){$('game').classList.add('hidden');$('authScreen').classList.add('hidden');
   $('startScreen').classList.remove('hidden');
@@ -3219,7 +3320,7 @@ $('startBtn').addEventListener('click',async()=>{
   const doctrines={nocas:$('chNocas').checked,speed:$('chSpeed').checked,tiny:$('chTiny').checked};
   const candidate=newRun(code,doctrines);$('startBtn').disabled=true;
   try{
-    const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines,state:{S:candidate,META},leaderboardPower:0});
+    const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines,state:{S:candidate,META}});
     SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;
     for(let i=0;i<shopLvl('veteran');i++)S.gens.push(makeGeneral(1));save();enterGame();
     const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The server has opened a validated run.','grn');
@@ -3246,9 +3347,9 @@ function renderSpeed(){const w=$('speedRow');if(!w||!S)return;w.innerHTML='';
 function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
   raw=clamp(raw,0,5);if(!S)return;updateMegaTimer();updateZTimer();
   let dt=raw*(S.speed===undefined?1:S.speed);
-  saveAcc+=raw;if(saveAcc>=15){saveAcc=0;save();}
+  saveAcc+=raw;if(saveAcc>=5){saveAcc=0;if(stateVersion>lastSavedVersion)save(false);}
   if(dt<=0){uiAcc+=raw;if(uiAcc>=0.25){uiAcc=0;updateTop();updateCards();updateMap();}return;}
-  S.playSec+=dt;
+  S.playSec+=dt;stateVersion++;
   const rt=rates();
   S.mp+=rt.mps*dt;S.gold+=rt.gps*dt;S.equip+=rt.eps*dt;
   S.qi+=rt.qps*dt;S.mana+=rt.mana*dt;
@@ -3270,10 +3371,10 @@ function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
   if(!modalUp){S.evT-=dt;
     if(S.evT<=0){S.evT=rand(45,85);fireEvent();}
     S.raidT-=dt;if(S.raidT<=0){S.raidT=22;tryRaid();}}
-  uiAcc+=dt;if(uiAcc>=0.25){uiAcc=0;
+  uiAcc+=raw;if(uiAcc>=0.25){uiAcc=0;
     updateTop();updateCards();updateMap();updateBuildings();updateBranches();updateTechs();
-    updatePacts();updateShop();updateSpells();renderPokemon();renderNursery();updateRealmBtn();updatePrestige();}
-  slowAcc+=dt;if(slowAcc>=1){slowAcc=0;
+    updatePacts();updateShop();updateSpells();if(!$('tab-pokemon').classList.contains('hidden'))renderPokemon();updateRealmBtn();updatePrestige();}
+  slowAcc+=raw;if(slowAcc>=1){slowAcc=0;
     checkAch();renderStats();renderLaw();updateHint();updateStatics();}
 }
 setInterval(tick,100);
@@ -3285,8 +3386,12 @@ async function boot(){
   try{loaded=await gameApi('load');}
   catch(error){showAuth();authMessage(error.message,true);return;}
   ACCOUNT={userId:sessionResult.data.session.user.id,username:loaded.username};SERVER_REVISION=loaded.revision||0;
+  saveConflict=false;saveDirty=false;stateVersion=0;lastSavedVersion=0;
   const data=loaded.state||null;$('authScreen').classList.add('hidden');authMessage('');
-  if(data&&data.META)META=Object.assign({},META,data.META);
+  const loadedMeta=data&&data.META&&typeof data.META==='object'?data.META:{};
+  META=Object.assign(defaultMeta(),loadedMeta);
+  META.shop=META.shop&&typeof META.shop==='object'?META.shop:{};
+  META.ach=META.ach&&typeof META.ach==='object'?META.ach:{};
   META.commanderName=loaded.commanderName||META.commanderName||'Commander';delete META.player;delete META.cloud;delete META.cloudTs;delete META.tainted;delete META.lb;delete META.byCountry;
   if($('accountUsername'))$('accountUsername').textContent='@'+ACCOUNT.username;if($('commanderNameIn'))$('commanderNameIn').value=META.commanderName;
   $('soundTgl').textContent=META.sound?'🔊 Sound: on':'🔇 Sound: off';
@@ -3311,8 +3416,12 @@ async function boot(){
     // Reopen those flags until the newly-added Kalos territories are conquered.
     if(!planeClearedId('pokemon')){delete S.pc.pokemon;if(S.won)S.won=false;}
     enterGame();
-    const g=offlineGains();
-    if(g)showModal('🕰️ WHILE YOU WERE AWAY',
+    const g=offlineGains(loaded.offlineSeconds);
+    if(g){
+      stateVersion++;
+      saveDirty=true;
+      await flushServerSave(false);
+      showModal('🕰️ WHILE YOU WERE AWAY',
       '<p>'+timeFmt(g.dt)+' passed. Your empire kept working at half pace:</p>'+
       '<div class="statgrid" style="margin-top:10px">'+
       vst('Manpower','+'+fmt(g.mp))+vst('Gold','+'+fmt(g.gold))+
@@ -3320,8 +3429,50 @@ async function boot(){
       (g.mana>0?vst('Mana','+'+fmt(g.mana)):'')+
       (g.aged>0?vst('Veterans aged out','−'+fmt(g.aged)):'')+'</div>',
       [{t:'Back to war'}]);
+    }
   }else showStart();}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&ACCOUNT){saveDirty=true;void flushServerSave(false);}});
+// Queue a prompt server save after gameplay actions. The existing 500 ms
+// debounce combines rapid clicks into one request and avoids excessive traffic.
+const gameRoot=$('game');
+if(gameRoot){
+  const noSaveButtonIds=new Set([
+    'saveNowBtn','logoutBtn','zIn','zOut','zReset','hintSkip'
+  ]);
+  gameRoot.addEventListener('click',event=>{
+    const button=event.target.closest('button');
+    if(!button||button.disabled)return;
+    if(noSaveButtonIds.has(button.id)||button.hasAttribute('data-tab'))return;
+    save();
+  });
+  gameRoot.addEventListener('change',event=>{
+    const control=event.target.closest('input,select');
+    if(control)save();
+  });
+}
+
+// Save when the tab is backgrounded. Full save payloads deliberately avoid
+// fetch keepalive because browsers impose small keepalive body limits.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'&&ACCOUNT&&!saveConflict){
+    saveDirty=true;
+    void flushServerSave(false);
+  }
+});
+
+// Retry any queued save when the browser reconnects.
+window.addEventListener('online',()=>{
+  if(ACCOUNT&&saveDirty)void flushServerSave(false);
+});
+
+// A browser cannot guarantee a final large request during shutdown. Warn only
+// while a save is pending so the player can wait for the Synced status.
+window.addEventListener('beforeunload',event=>{
+  if(ACCOUNT&&(saveDirty||saveBusy)){
+    event.preventDefault();
+    event.returnValue='';
+  }
+});
+
 void boot();
 </script>
 </body>
