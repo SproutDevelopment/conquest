@@ -800,7 +800,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <div class="sect panel">
         <div class="ptitle">Campaign ledger</div>
         <div class="statgrid" id="statGrid"></div>
-        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">rankings paused · authority phase 6 is active</span></div>
+        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">rankings paused · authority phase 7 is active</span></div>
         <div class="statgrid leaderboard-scroll" id="lbPlayers" role="region" aria-label="Top 100 player leaderboard" tabindex="0"></div>
         <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">country rankings resume after Pokémon systems become server-authoritative</span></div>
         <div class="statgrid leaderboard-scroll" id="lbNations" role="region" aria-label="All countries leaderboard" tabindex="0"></div>
@@ -834,7 +834,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authority phase 6 · server generals, magic, cultivation and Prestige</footer>
+  <footer>IRON MANDATE · authority phase 7 · server generals, magic, cultivation and Prestige</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -2241,22 +2241,10 @@ function defaultMeta(){return{
 let META=defaultMeta();
 function shopLvl(id){return META.shop[id]||0;}
 function conqCount(){return S?Object.keys(S.conq).length:0;}
-function newRun(code,ch){
-  const r={v:1,startCode:code,startedAt:Date.now(),lastTs:Date.now(),playSec:0,
-    mp:0,gold:20+10000*shopLvl('aura'),equip:0,qi:0,clicks:0,
-    conq:{},hp:{},b:{off:0,bar:0,civ:0,mil:0,aca:0,well:0,shrine:0},
-    tech:{},disc:null,realm:0,plane:'earth',pc:{},mana:0,spells:{fire:0,shield:0,mind:0,summon:0,anchor:0,transmute:0,warpath:0},shieldUntil:0,
-    renown:0,speed:1,summons:{h:0,m:0},riskW:{},infT:90,infLvl:0,stormCd:0,
-    tr:{snip:0,armor:0,navy:0,air:0,sf:0},
-    summonUntil:0,anchorUntil:0,warpath:false,
-    gens:[],gid:1,cmd:null,law:'vol',tension:0,pacts:{},
-    auto:false,target:null,tAcc:0,evT:rand(40,75),raidT:25,
-    ch:{nocas:!!ch.nocas,speed:!!ch.speed,tiny:!!ch.tiny,megaZygarde:false},chFail:{},
-    st:{won:0,cas:0,gensLost:0,atk:0,dmg:0,goldE:0,mpRec:0},
-    rc:{},rebels:{},buyN:1,hint:0,won:false,
-    poke:{balls:3,bought:0,owned:{},team:[],seen:{},shards:0,evo:{},megaStones:0,mega:{},activeMega:null,megaCooldownUntil:0,zCrystals:0,zActiveUntil:0,zCooldownUntil:0,dmaxBand:false,dmaxEnergy:0,activeDmax:null,dmaxCooldownUntil:0,raidCooldown:0,raidWins:0,teraOrb:false,teraShards:0,teraTypes:{},activeTera:null,teraCooldownUntil:0,battlePoints:0,worldRank:0,champStreak:0,champWins:{},training:{},eggs:[],eggsHatched:0,traits:{},shiny:{},rivalWins:{},rivalStreak:0,specialForms:{},zygardeCells:0,trials:{},legendProgress:{}},badges:{}};
-  if(META.megaZygardePending){r.ch.megaZygarde=true;r.ch.nocas=true;r.ch.tiny=true;META.megaZygardePending=0;}r.conq[code]=1;
-  return r;}
+function newRun(){
+  throw new Error('Authority Phase 7 campaign state is created by Supabase.');
+}
+
 
 const AUTH_GAME_KEYS=['mp','gold','equip','qi','mana','clicks','b','tech','disc','law','pacts','tr','conq','hp','pc','rc','rebels','target','realm','renown','won','badges','chFail','spells','shieldUntil','summonUntil','anchorUntil','warpath','gens','gid','cmd','summons','riskW','infT','infLvl','tension','auto','speed','playSec','ch','poke','serverAuth'];
 const AUTH_STAT_KEYS=['mpRec','goldE','trained','aged','won','cas','atk','dmg','gensLost'];
@@ -3510,10 +3498,10 @@ $('startBtn').addEventListener('click',async()=>{
   const code=$('countrySel').value;
   if(!CBY[code]||CBY[code].tier>startTierCap()){toast('🔒 Locked homeland','That nation unlocks after more prestiges.','bad');return;}
   const doctrines={nocas:$('chNocas').checked,speed:$('chSpeed').checked,tiny:$('chTiny').checked};
-  const candidate=newRun(code,doctrines);$('startBtn').disabled=true;
+  $('startBtn').disabled=true;
   try{
-    const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines,state:{S:candidate,META}});
-    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||4;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
+    const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines});
+    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||7;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
     enterGame();
     const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The server has opened a validated run.','grn');
   }catch(error){toast('Campaign could not start',error.message,'bad');}
