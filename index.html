@@ -2201,7 +2201,7 @@ function buyNFor(b){if(S.buyN==='max'){const r=1.17,a=b.base*Math.pow(r,S.b[b.id
 function bCost(b,n){const r=1.17;return b.base*Math.pow(r,S.b[b.id])*(Math.pow(r,n)-1)/(r-1);}
 function buyBuilding(id){const b=BUILDINGS.find(x=>x.id===id);let n=buyNFor(b);
   if(n<1)return;const c=bCost(b,n);if(S.gold<c)return;
-  S.gold-=c;S.b[id]+=n;sfx('buy');renderBuildings();}
+  S.gold-=c;S.b[id]+=n;sfx('buy');renderBuildings();save();}
 function techCost(t){let c=t.cost;if(S.disc&&S.disc.id===t.id)c*=1-S.disc.off;return Math.floor(c);}
 function techLocked(t){if(t.reqConq&&conqCount()<t.reqConq)return'Needs '+t.reqConq+' nations';
   if(t.needRealm&&S.realm<t.needRealm)return'Needs '+REALMS[t.needRealm].n;
@@ -2815,7 +2815,8 @@ function renderBuildings(){const g=$('buildGrid');g.innerHTML='';BREFS={};
     d.querySelector('.buy').onclick=()=>buyBuilding(b.id);
     BREFS[b.id]={cnt:d.querySelector('.cnt'),bl:d.querySelector('.bl'),
       c:d.querySelector('.c'),btn:d.querySelector('.buy')};
-    g.appendChild(d);}}
+    g.appendChild(d);}
+  updateBuildings();}
 function updateBuildings(){for(const b of BUILDINGS){const R=BREFS[b.id];if(!R)continue;
   const n=buyNFor(b),nn=Math.max(1,n),cost=bCost(b,nn);
   R.cnt.textContent=S.b[b.id];
