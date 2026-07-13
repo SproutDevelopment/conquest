@@ -38,6 +38,13 @@ h1,h2,h3{font-weight:700}
 #topbar .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 #topbar .brand h1{font-size:15px;letter-spacing:.28em;color:var(--brass)}
 #topbar .brand .sub{font-size:11px;color:var(--faint);letter-spacing:.1em}
+.order-queue-badge{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+  border:1px solid var(--line2);border-radius:10px;padding:2px 7px;color:var(--dim);
+  background:var(--sunken);white-space:nowrap}
+.order-queue-badge.pending{color:var(--brass-hi);border-color:var(--brass);
+  box-shadow:0 0 12px rgba(201,162,39,.16)}
+body.optimistic-state #resbar .val{filter:drop-shadow(0 0 4px rgba(232,201,90,.28))}
+body.optimistic-state .res{border-style:dashed}
 #resbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px}
 .res{display:flex;align-items:center;gap:6px;background:var(--sunken);border:1px solid var(--line);
   border-radius:4px;padding:4px 9px;font-size:13px}
@@ -522,6 +529,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
     <div class="brand">
       <h1 class="stencil">IRON MANDATE</h1>
       <span class="sub" id="runLbl"></span>
+      <span id="orderQueueBadge" class="order-queue-badge hidden" aria-live="polite"></span>
       <div id="speedRow" title="Game speed — Space pauses"></div>
       <div id="tensionwrap"><label>World tension</label><div class="meter"><i id="tensionFill"></i></div><span id="tensionVal" class="num">0%</span></div>
     </div>
@@ -835,7 +843,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authority phase 8 · server generals, magic, cultivation and Prestige</footer>
+  <footer>IRON MANDATE · authority phase 8.4 · optimistic UI, canonical Supabase state</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -877,6 +885,14 @@ function setAuthTab(tab){
 function showAuth(){
   ACCOUNT=null;S=null;META=defaultMeta();SERVER_REVISION=0;
   saveDirty=false;saveBusy=false;saveConflict=false;actionBusy=false;
+  for(const command of serverActionQueue.splice(0))command.resolve(null);
+  if(serverActionActiveBatch){
+    for(const command of serverActionActiveBatch.commands)command.resolve(null);
+  }
+  serverActionActiveBatch=null;serverActionSending=false;
+  clearTimeout(serverActionTimer);serverActionTimer=null;
+  clearOptimisticCanonical();
+  mobilizePending=0;mobilizeSending=false;clearTimeout(mobilizeTimer);mobilizeTimer=null;
   AUTHORITY_PHASE=0;SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
   stateVersion=0;lastSavedVersion=0;
   clearTimeout(saveTimer);saveTimer=null;
@@ -2258,7 +2274,7 @@ let META=defaultMeta();
 function shopLvl(id){return META.shop[id]||0;}
 function conqCount(){return S?Object.keys(S.conq).length:0;}
 function newRun(){
-  throw new Error('Authority Phase 7 campaign state is created by Supabase.');
+  throw new Error('Authority Phase 8 campaign state is created by Supabase.');
 }
 
 
@@ -2266,6 +2282,311 @@ const AUTH_GAME_KEYS=['mp','gold','equip','qi','mana','clicks','b','tech','disc'
 const AUTH_STAT_KEYS=['mpRec','goldE','trained','aged','won','cas','atk','dmg','gensLost'];
 const AUTH_META_KEYS=['pp','totPP','prestiges','best','bestCombo','shop','endings','bestGen','wins','fastWin','fastEarth','lifeWon','lifeCas','megaZygardeAttempts','megaZygardePending','megaZygardeUnlocked','ach'];
 function copyJson(v){return JSON.parse(JSON.stringify(v));}
+let optimisticCanonicalS=null;
+let optimisticCanonicalMeta=null;
+
+function optimisticNumber(value,fallback=0){
+  const number=Number(value);
+  return Number.isFinite(number)?number:fallback;
+}
+
+function optimisticObject(value){
+  return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+}
+
+function pendingOptimisticCommands(){
+  const commands=[];
+  if(serverActionActiveBatch&&Array.isArray(serverActionActiveBatch.commands)){
+    commands.push(...serverActionActiveBatch.commands);
+  }
+  commands.push(...serverActionQueue);
+  return commands;
+}
+
+function captureOptimisticCanonical(){
+  optimisticCanonicalS=S?copyJson(S):null;
+  optimisticCanonicalMeta=copyJson(META);
+}
+
+function clearOptimisticCanonical(){
+  optimisticCanonicalS=null;
+  optimisticCanonicalMeta=null;
+  document.body.classList.remove('optimistic-state');
+  const badge=$('orderQueueBadge');
+  if(badge){badge.classList.add('hidden');badge.classList.remove('pending');badge.textContent='';}
+}
+
+function updateOptimisticQueueBadge(){
+  const badge=$('orderQueueBadge');
+  const count=pendingServerActionCount();
+  document.body.classList.toggle('optimistic-state',count>0);
+  if(!badge)return;
+  if(count<1){
+    badge.classList.add('hidden');
+    badge.classList.remove('pending');
+    badge.textContent='';
+    return;
+  }
+  badge.classList.remove('hidden');
+  badge.classList.add('pending');
+  badge.textContent='⚡ '+count+' predicted order'+(count===1?'':'s');
+}
+
+function optimisticBuildingCount(item,mode){
+  const buildings=optimisticObject(S.b);
+  const current=Math.max(0,optimisticNumber(buildings[item.id]));
+  if(mode==='max'){
+    const ratio=1.17;
+    const first=item.base*Math.pow(ratio,current);
+    return Math.max(0,Math.floor(
+      Math.log(Math.max(0,S.gold)*(ratio-1)/first+1)/Math.log(ratio)
+    ));
+  }
+  const count=Number(mode);
+  return [1,10,100].includes(count)?count:0;
+}
+
+function optimisticBuildingCost(item,count){
+  const buildings=optimisticObject(S.b);
+  const current=Math.max(0,optimisticNumber(buildings[item.id]));
+  const ratio=1.17;
+  return item.base*Math.pow(ratio,current)*(Math.pow(ratio,count)-1)/(ratio-1);
+}
+
+function applyOptimisticAction(type,payload){
+  if(!S)return false;
+  payload=payload&&typeof payload==='object'?payload:{};
+
+  if(type==='mobilize'){
+    const count=Math.max(1,Math.min(60,Math.floor(optimisticNumber(payload.count,1))));
+    const gained=clickPow()*count;
+    S.mp=Math.max(0,optimisticNumber(S.mp))+gained;
+    S.clicks=Math.max(0,optimisticNumber(S.clicks))+count;
+    S.st=optimisticObject(S.st);
+    S.st.mpRec=Math.max(0,optimisticNumber(S.st.mpRec))+gained;
+    return true;
+  }
+
+  if(type==='buy-building'){
+    const item=BUILDINGS.find(building=>building.id===String(payload.id||''));
+    if(!item)return false;
+    const count=optimisticBuildingCount(item,payload.mode);
+    if(count<1)return false;
+    const cost=optimisticBuildingCost(item,count);
+    if(optimisticNumber(S.gold)+1e-9<cost)return false;
+    S.gold=optimisticNumber(S.gold)-cost;
+    S.b=optimisticObject(S.b);
+    S.b[item.id]=Math.max(0,optimisticNumber(S.b[item.id]))+count;
+    return true;
+  }
+
+  if(type==='buy-tech'){
+    const item=TECHS.find(technology=>technology.id===String(payload.id||''));
+    if(!item)return false;
+    S.tech=optimisticObject(S.tech);
+    if(S.tech[item.id])return false;
+    const cost=techCost(item);
+    if(techLocked(item)||optimisticNumber(S.gold)+1e-9<cost)return false;
+    S.gold=optimisticNumber(S.gold)-cost;
+    S.tech[item.id]=1;
+    S.disc=null;
+    return true;
+  }
+
+  if(type==='set-law'){
+    const id=String(payload.id||'');
+    const law=LAWS[id];
+    if(!law||optimisticNumber(S.tension)+1e-9<law.req)return false;
+    S.law=id;
+    return true;
+  }
+
+  if(type==='sign-pact'){
+    const bloc=String(payload.bloc||'');
+    if(!BLOCS[bloc])return false;
+    S.pacts=optimisticObject(S.pacts);
+    if(optimisticNumber(S.pacts[bloc])>Date.now())return false;
+    const cost=pactCost(bloc);
+    if(optimisticNumber(S.gold)+1e-9<cost)return false;
+    S.gold=optimisticNumber(S.gold)-cost;
+    S.pacts[bloc]=Date.now()+600000+120000*shopLvl('diplomat');
+    return true;
+  }
+
+  if(type==='train-branch'){
+    const id=String(payload.id||'');
+    const branch=BRANCHES.find(item=>item.id===id);
+    const fraction=Number(payload.fraction);
+    if(!branch||![0.01,0.1,0.5].includes(fraction)||branchLocked(branch))return false;
+    const count=Math.floor(infantry()*fraction);
+    if(count<1)return false;
+    const cost=trainCostB(branch,count);
+    if(optimisticNumber(S.gold)+1e-9<cost.g||
+       optimisticNumber(S.equip)+1e-9<cost.e)return false;
+    S.gold=optimisticNumber(S.gold)-cost.g;
+    S.equip=optimisticNumber(S.equip)-cost.e;
+    S.tr=optimisticObject(S.tr);
+    S.tr[id]=Math.max(0,optimisticNumber(S.tr[id]))+count;
+    S.st=optimisticObject(S.st);
+    S.st.trained=Math.max(0,optimisticNumber(S.st.trained))+count;
+    return true;
+  }
+
+  if(type==='disband-branch'){
+    const id=String(payload.id||'');
+    if(!BRANCHES.some(item=>item.id===id))return false;
+    S.tr=optimisticObject(S.tr);
+    S.tr[id]=0;
+    return true;
+  }
+
+  if(type==='set-target'){
+    const code=String(payload.code||'');
+    if(code&&(!BY[code]||S.conq[code]))return false;
+    S.target=code||null;
+    return true;
+  }
+
+  if(type==='set-speed'){
+    const speed=Number(payload.speed);
+    if(![0,1,2,4].includes(speed))return false;
+    S.speed=speed;
+    return true;
+  }
+
+  if(type==='set-auto'){
+    S.auto=payload.enabled===true;
+    return true;
+  }
+
+  if(type==='train-general'){
+    const id=Number(payload.id);
+    const general=Array.isArray(S.gens)?S.gens.find(item=>Number(item.id)===id):null;
+    if(!general)return false;
+    const level=Math.max(1,Math.floor(optimisticNumber(general.lvl,1)));
+    const rarity=Math.max(0,Math.min(4,Math.floor(optimisticNumber(general.r))));
+    const cost=Math.floor(100*Math.pow(2.2,level)*(1+rarity));
+    if(optimisticNumber(S.gold)+1e-9<cost)return false;
+    S.gold=optimisticNumber(S.gold)-cost;
+    general.lvl=level+1;
+    general.xp=0;
+    return true;
+  }
+
+  if(type==='set-commander'){
+    const id=Number(payload.id);
+    const general=Array.isArray(S.gens)?S.gens.find(item=>Number(item.id)===id):null;
+    if(!general||general.spec!=='combat')return false;
+    S.cmd=Number(S.cmd)===id?null:id;
+    return true;
+  }
+
+  if(type==='recruit-general'){
+    const mode=String(payload.mode||'standard');
+    S.summons=optimisticObject(S.summons);
+    if(mode==='standard'){
+      const count=Array.isArray(S.gens)?S.gens.length:0;
+      const goldCost=500*Math.pow(4,count);
+      const manpowerCost=200*Math.pow(2,count);
+      if(optimisticNumber(S.gold)+1e-9<goldCost||
+         optimisticNumber(S.mp)+1e-9<manpowerCost)return false;
+      S.gold=optimisticNumber(S.gold)-goldCost;
+      S.mp=optimisticNumber(S.mp)-manpowerCost;
+      return true;
+    }
+    if(mode==='heroic'){
+      const level=Math.max(0,Math.floor(optimisticNumber(S.summons.h)));
+      const cost=Math.floor(150*Math.pow(1.6,level));
+      if(optimisticNumber(S.renown)+1e-9<cost)return false;
+      S.renown=optimisticNumber(S.renown)-cost;
+      S.summons.h=level+1;
+      return true;
+    }
+    if(mode==='mythic'){
+      const level=Math.max(0,Math.floor(optimisticNumber(S.summons.m)));
+      const cost=Math.floor(2500*Math.pow(1.8,level));
+      if(optimisticNumber(S.renown)+1e-9<cost)return false;
+      S.renown=optimisticNumber(S.renown)-cost;
+      S.summons.m=level+1;
+      return true;
+    }
+    return false;
+  }
+
+  if(type==='advance-realm'){
+    const next=Math.floor(optimisticNumber(S.realm))+1;
+    if(next<2||next>=REALMS.length)return false;
+    const discount=Math.max(0,1-0.2*shopLvl('tribheart'));
+    const cost=Math.floor(REALMS[next].cost*discount);
+    if(optimisticNumber(S.qi)+1e-9<cost)return false;
+    S.qi=optimisticNumber(S.qi)-cost;
+    S.realm=next;
+    return true;
+  }
+
+  if(type==='buy-shop'){
+    const id=String(payload.id||'');
+    const item=SHOP.find(rule=>rule.id===id);
+    if(!item)return false;
+    META.shop=optimisticObject(META.shop);
+    const level=Math.max(0,Math.floor(optimisticNumber(META.shop[id])));
+    if(level>=item.max)return false;
+    const cost=Math.ceil(item.cost(level));
+    if(optimisticNumber(META.pp)+1e-9<cost)return false;
+    META.pp=optimisticNumber(META.pp)-cost;
+    META.shop[id]=level+1;
+    return true;
+  }
+
+  // Random combat, events, spells and Pokémon outcomes remain visibly queued
+  // but are not invented by the browser.
+  return false;
+}
+
+function refreshOptimisticDisplay(type=''){
+  updateTop();
+  updateCards();
+
+  if(type==='mobilize')return;
+  if(type==='buy-building'){updateBuildings();return;}
+  if(type==='buy-tech'){renderTechs();updateStatics();return;}
+  if(type==='set-law'){renderLaw();return;}
+  if(type==='sign-pact'){renderPacts();return;}
+  if(type==='train-branch'||type==='disband-branch'){renderBranches();return;}
+  if(type==='set-target'){refreshTargets();updateMap();return;}
+  if(type==='set-speed'){renderSpeed();return;}
+  if(type==='set-auto'){updateStatics();return;}
+  if(type==='train-general'||type==='set-commander'||type==='recruit-general'){
+    renderGenerals();return;
+  }
+  if(type==='advance-realm'){renderRealm();updateRealmBtn();updateStatics();return;}
+  if(type==='buy-shop'){renderShop();updateStatics();return;}
+}
+
+function rebuildOptimisticState(){
+  if(!S||!optimisticCanonicalS){
+    updateOptimisticQueueBadge();
+    return;
+  }
+
+  S=copyJson(optimisticCanonicalS);
+  META=copyJson(optimisticCanonicalMeta||META);
+
+  const pending=pendingOptimisticCommands();
+  for(const command of pending){
+    command.optimisticApplied=applyOptimisticAction(command.type,command.payload);
+  }
+
+  updateOptimisticQueueBadge();
+}
+
+function rollbackAndReplayOptimisticState(){
+  rebuildOptimisticState();
+  refreshAfterActionBatch(
+    pendingOptimisticCommands().map(command=>command.type)
+  );
+}
+
 function applyAuthoritativeEnvelope(result){
   if(result&&result.revision!==undefined)SERVER_REVISION=Number(result.revision);
   if(result&&result.authorityPhase!==undefined)AUTHORITY_PHASE=Number(result.authorityPhase)||0;
@@ -2282,44 +2603,251 @@ function applyAuthoritativeEnvelope(result){
     if(unlocked.length)renderAch();
   }
   if(result&&result.world)presentWorldResult({result:result.world});
-  if(!serverState||!serverState.S||!S)return;
+  if(!serverState||!serverState.S||!S){
+    if(serverState&&serverState.S===null)clearOptimisticCanonical();
+    return;
+  }
   const source=serverState.S;
   for(const key of AUTH_GAME_KEYS)if(Object.prototype.hasOwnProperty.call(source,key))S[key]=copyJson(source[key]);
   S.st=S.st||{};const stats=source.st||{};
   for(const key of AUTH_STAT_KEYS)if(Object.prototype.hasOwnProperty.call(stats,key))S.st[key]=copyJson(stats[key]);
+
+  // This is the last fully server-confirmed state. Any still-pending commands
+  // are immediately replayed as visual predictions on top of it.
+  captureOptimisticCanonical();
+  rebuildOptimisticState();
 }
 
-async function runServerAction(type,payload={},quiet=false){
-  if(!ACCOUNT||!S||saveConflict)return null;
-  if(actionBusy){toast('Server action pending','Wait for the current order to finish.','bad');return null;}
-  clearTimeout(saveTimer);
-  while(saveBusy)await new Promise(resolve=>setTimeout(resolve,40));
-  if(saveDirty){
-    const saved=await flushServerSave(false);
-    if(!saved)return null;
+const SERVER_ACTION_BATCH_MAX=20;
+const SERVER_ACTION_QUEUE_MAX=200;
+const SERVER_ACTION_FLUSH_MS=35;
+let serverActionQueue=[];
+let serverActionTimer=null;
+let serverActionSending=false;
+let serverActionActiveBatch=null;
+let serverActionDelayToastShown=false;
+
+function pendingServerActionCount(){
+  const active=serverActionActiveBatch&&Array.isArray(serverActionActiveBatch.commands)
+    ?serverActionActiveBatch.commands.length:0;
+  return serverActionQueue.length+active;
+}
+
+function updateServerActionBusy(){
+  actionBusy=serverActionSending||pendingServerActionCount()>0;
+  updateOptimisticQueueBadge();
+}
+
+function scheduleServerActionFlush(delay=SERVER_ACTION_FLUSH_MS){
+  updateServerActionBusy();
+  if(serverActionTimer||serverActionSending)return;
+  if(!serverActionActiveBatch&&serverActionQueue.length<1)return;
+  serverActionTimer=setTimeout(()=>{
+    serverActionTimer=null;
+    void flushServerActionQueue();
+  },Math.max(0,delay));
+}
+
+function hasPendingServerAction(type,mode=''){
+  const matches=command=>command&&command.type===type&&
+    (!mode||String(command.payload&&command.payload.mode||'')===mode);
+  if(serverActionQueue.some(matches))return true;
+  return !!(serverActionActiveBatch&&serverActionActiveBatch.commands.some(matches));
+}
+
+function actionFailureMessage(item){
+  return item&&item.error?String(item.error):'The server rejected this order.';
+}
+
+function refreshAfterActionBatch(types){
+  const onlyMobilize=types.length>0&&types.every(type=>type==='mobilize');
+  if(onlyMobilize){
+    updateTop();updateCards();
+    return;
   }
-  actionBusy=true;
+
+  renderBuildings();renderTechs();renderPacts();renderBranches();renderLaw();renderPlaneRow();
+  renderGenerals();renderRealm();renderSpells();renderShop();
+  updateTop();updateCards();updateMap();updateRegionTabs();updateStatics();
+}
+
+function resolveFailedActionBatch(commands,message,showToast=true){
+  if(showToast)toast('☁ Orders rejected',message,'bad');
+  for(const command of commands)command.resolve(null);
+}
+
+async function flushServerActionQueue(){
+  if(serverActionSending||!ACCOUNT||!S||saveConflict){
+    updateServerActionBusy();
+    return;
+  }
+  if(saveBusy){
+    scheduleServerActionFlush(30);
+    return;
+  }
+
+  if(!serverActionActiveBatch){
+    if(serverActionQueue.length<1){
+      updateServerActionBusy();
+      return;
+    }
+    const commands=serverActionQueue.splice(0,SERVER_ACTION_BATCH_MAX);
+    const batchId=crypto.randomUUID();
+    serverActionActiveBatch={
+      batchId,
+      commands,
+      attempts:0,
+      request:{
+        revision:SERVER_REVISION,
+        batchId,
+        actions:commands.map(command=>({
+          actionId:command.actionId,
+          type:command.type,
+          payload:command.payload
+        }))
+      }
+    };
+  }
+
+  const batch=serverActionActiveBatch;
+  serverActionSending=true;
+  updateServerActionBusy();
+
   try{
-    const actionId=crypto.randomUUID();
-    const request={revision:SERVER_REVISION,actionId,type,payload};
-    const result=await gameApiWithRetry('game-action',request);
-    applyAuthoritativeEnvelope(result);
+    const envelope=await gameApi(
+      'game-action-batch',
+      batch.request,
+      {timeoutMs:10000}
+    );
+
+    serverActionActiveBatch=null;
+    serverActionDelayToastShown=false;
+    applyAuthoritativeEnvelope(envelope);
     lastSavedVersion=stateVersion;
-    if(!quiet)toast('☁ Order confirmed','The server accepted the action.','grn');
-    renderBuildings();renderTechs();renderPacts();renderBranches();renderLaw();renderPlaneRow();
-    renderGenerals();renderRealm();renderSpells();renderShop();
-    updateTop();updateCards();updateMap();updateRegionTabs();updateStatics();
-    return result;
+
+    const resultList=Array.isArray(envelope.results)?envelope.results:[];
+    const byId=new Map(resultList.map(item=>[String(item.actionId||''),item]));
+
+    for(const command of batch.commands){
+      const item=byId.get(command.actionId);
+      if(item&&item.ok){
+        if(!command.quiet){
+          toast('☁ Order confirmed','The server accepted the action.','grn');
+        }
+        command.resolve(Object.assign({},envelope,{
+          result:item.result||{},
+          actionId:command.actionId,
+          batchResult:item
+        }));
+      }else{
+        const message=actionFailureMessage(item);
+        if(command.type!=='mobilize'&&!command.quiet){
+          toast('☁ Order rejected',message,'bad');
+        }
+        command.resolve(null);
+      }
+    }
+
+    refreshAfterActionBatch(batch.commands.map(command=>command.type));
   }catch(error){
-    if(error&&error.status===409){
+    const status=Number(error&&error.status)||0;
+
+    if(status===409){
+      serverActionActiveBatch=null;
       saveConflict=true;
-      toast('☁ Action conflict','Reload to continue from the canonical server state.','bad');
-    }else toast('☁ Order rejected',error.message,'bad');
-    return null;
+      for(const command of serverActionQueue.splice(0))command.resolve(null);
+      rollbackAndReplayOptimisticState();
+      resolveFailedActionBatch(
+        batch.commands,
+        'The account changed in another tab or device. Reload to continue.',
+        false
+      );
+      toast(
+        '☁ Action conflict',
+        'Reload to continue from the canonical server state.',
+        'bad'
+      );
+    }else if(status>=400&&status<500&&status!==429){
+      serverActionActiveBatch=null;
+      rollbackAndReplayOptimisticState();
+      resolveFailedActionBatch(
+        batch.commands,
+        error&&error.message?error.message:'The server rejected the action batch.'
+      );
+    }else{
+      // Keep exactly the same batch ID and payload. This makes an ambiguous
+      // retry safe even when the database committed but the response was lost.
+      batch.attempts=(batch.attempts||0)+1;
+      if(!serverActionDelayToastShown){
+        serverActionDelayToastShown=true;
+        toast(
+          '☁ Connection delayed',
+          'Your orders are still queued and will retry automatically.',
+          ''
+        );
+      }
+      const retryDelay=Math.min(3000,350*Math.pow(2,Math.min(3,batch.attempts-1)));
+      scheduleServerActionFlush(retryDelay);
+    }
   }finally{
-    actionBusy=false;
-    if(saveDirty)void flushServerSave(false);
+    serverActionSending=false;
+    updateServerActionBusy();
+
+    if(serverActionActiveBatch){
+      scheduleServerActionFlush(250);
+    }else if(serverActionQueue.length>0){
+      scheduleServerActionFlush(10);
+    }else if(saveDirty){
+      void flushServerSave(false);
+    }
   }
+}
+
+function runServerAction(type,payload={},quiet=false){
+  if(!ACCOUNT||!S||saveConflict)return Promise.resolve(null);
+
+  // Automatic siege/world pulses are coalesced so a slow connection cannot
+  // create a large queue of obsolete timer actions.
+  if(type==='attack'&&payload&&payload.mode==='siege'&&
+     hasPendingServerAction('attack','siege')){
+    return Promise.resolve(null);
+  }
+  if(type==='world-pulse'&&hasPendingServerAction('world-pulse')){
+    return Promise.resolve(null);
+  }
+
+  if(pendingServerActionCount()>=SERVER_ACTION_QUEUE_MAX){
+    toast(
+      '☁ Order queue full',
+      'The connection is too far behind. Your latest order was not added.',
+      'bad'
+    );
+    return Promise.resolve(null);
+  }
+
+  return new Promise(resolve=>{
+    if(!optimisticCanonicalS)captureOptimisticCanonical();
+
+    const command={
+      actionId:crypto.randomUUID(),
+      type,
+      payload,
+      quiet,
+      resolve,
+      optimisticApplied:false
+    };
+    command.optimisticApplied=applyOptimisticAction(type,payload);
+    serverActionQueue.push(command);
+
+    updateOptimisticQueueBadge();
+    if(command.optimisticApplied)refreshOptimisticDisplay(type);
+
+    if(serverActionQueue.length>=SERVER_ACTION_BATCH_MAX){
+      scheduleServerActionFlush(0);
+    }else{
+      scheduleServerActionFlush();
+    }
+  });
 }
 
 function currentPreferences(){
@@ -2495,17 +3023,57 @@ function expCas(c){const i=effInfo(c),AP=armyPower();
   return AP>0?i.eff/(i.eff+AP)*0.035*casMult():0.035*casMult();}
 
 /* ================= core actions ================= */
-let mobilizePending=0,mobilizeTimer=null;
+let mobilizePending=0,mobilizeTimer=null,mobilizeSending=false;
+const MOBILIZE_BATCH_MAX=60;
+const MOBILIZE_FLUSH_MS=120;
+
+function scheduleMobilizeFlush(delay=MOBILIZE_FLUSH_MS){
+  if(mobilizeTimer||mobilizeSending||mobilizePending<1)return;
+  mobilizeTimer=setTimeout(()=>{
+    mobilizeTimer=null;
+    void flushMobilizeQueue();
+  },delay);
+}
+
+async function flushMobilizeQueue(){
+  if(mobilizeSending||mobilizePending<1||!ACCOUNT||!S||saveConflict)return;
+
+  // Never discard clicks just because another server order or preference save
+  // is currently finishing. Keep them queued and try again shortly.
+  if(saveBusy){
+    scheduleMobilizeFlush(45);
+    return;
+  }
+
+  mobilizeSending=true;
+  const count=Math.min(MOBILIZE_BATCH_MAX,mobilizePending);
+  mobilizePending-=count;
+
+  try{
+    const result=await runServerAction('mobilize',{count},true);
+    if(result&&result.result){
+      const gained=Number(result.result.gained)||0;
+      floatAtEl($('seal'),'+'+fmt(gained),'');
+    }else{
+      // Network or temporary server failure: restore this batch rather than
+      // losing clicks.
+      mobilizePending=Math.min(5000,mobilizePending+count);
+    }
+  }finally{
+    mobilizeSending=false;
+    if(mobilizePending>0)scheduleMobilizeFlush(35);
+  }
+}
+
 function doClick(){
   if(!S||AUTHORITY_PHASE<2)return;
-  mobilizePending=Math.min(20,mobilizePending+1);
-  floatAtEl($('seal'),'Mobilize','');sfx('click');
-  clearTimeout(mobilizeTimer);
-  mobilizeTimer=setTimeout(async()=>{
-    const count=mobilizePending;mobilizePending=0;
-    const result=await runServerAction('mobilize',{count},true);
-    if(result&&result.result)floatAtEl($('seal'),'+'+fmt(Number(result.result.gained)||0),'');
-  },120);
+  mobilizePending=Math.min(5000,mobilizePending+1);
+
+  // Immediate local feedback keeps the clicker responsive while Supabase
+  // verifies the accumulated batch.
+  floatAtEl($('seal'),mobilizePending>1?'Mobilize ×'+mobilizePending:'Mobilize','');
+  sfx('click');
+  scheduleMobilizeFlush();
 }
 function buyNFor(b){if(S.buyN==='max'){const r=1.17,a=b.base*Math.pow(r,S.b[b.id]);
     return Math.max(0,Math.floor(Math.log(S.gold*(r-1)/a+1)/Math.log(r)));}
@@ -2579,7 +3147,8 @@ async function burst(code,quiet){
   if(result)showCombatResult(result,!!quiet);
 }
 function combatTick(dt){
-  if(AUTHORITY_PHASE<3||!S.target||S.conq[S.target]||S.mp<1||actionBusy)return;
+  if(AUTHORITY_PHASE<3||!S.target||S.conq[S.target]||S.mp<1||
+     hasPendingServerAction('attack','siege'))return;
   serverCombatAcc+=Math.max(0,dt);
   if(serverCombatAcc<0.75)return;
   serverCombatAcc=0;
@@ -2752,7 +3321,7 @@ async function resolveServerRebellion(eventId,choice){
   updateCards();updateTop();
 }
 async function fireEvent(){
-  if(worldPulseBusy||actionBusy||AUTHORITY_PHASE<3)return;
+  if(worldPulseBusy||hasPendingServerAction('world-pulse')||AUTHORITY_PHASE<3)return;
   worldPulseBusy=true;
   try{const result=await runServerAction('world-pulse',{},true);if(result)presentWorldResult(result);}
   finally{worldPulseBusy=false;}
@@ -3551,7 +4120,8 @@ function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
   if(dt<=0){uiAcc+=raw;if(uiAcc>=0.25){uiAcc=0;updateTop();updateCards();updateMap();}return;}
   const rt=rates();
   // Phase 2: resources, aging, training totals and tension are settled by the server.
-  if(S.auto&&S.tech.staff&&(!S.target||S.conq[S.target])&&!actionBusy&&Date.now()>=autoTargetAt){
+  if(S.auto&&S.tech.staff&&(!S.target||S.conq[S.target])&&
+     !hasPendingServerAction('set-target')&&Date.now()>=autoTargetAt){
     autoTargetAt=Date.now()+1500;const w=weakestFoe();if(w)void setSiege(w);}
   combatTick(raw);
   // World events are settled automatically by every canonical server request.
