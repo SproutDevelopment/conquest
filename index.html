@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests">
 <title>IRON MANDATE — Pokémon World Step 19</title>
 <style>
 :root{
@@ -800,7 +801,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <div class="sect panel">
         <div class="ptitle">Campaign ledger</div>
         <div class="statgrid" id="statGrid"></div>
-        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">rankings paused · authority phase 7 is active</span></div>
+        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">rankings paused · authority phase 8 is active</span></div>
         <div class="statgrid leaderboard-scroll" id="lbPlayers" role="region" aria-label="Top 100 player leaderboard" tabindex="0"></div>
         <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">country rankings resume after Pokémon systems become server-authoritative</span></div>
         <div class="statgrid leaderboard-scroll" id="lbNations" role="region" aria-label="All countries leaderboard" tabindex="0"></div>
@@ -834,7 +835,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authority phase 7 · server generals, magic, cultivation and Prestige</footer>
+  <footer>IRON MANDATE · authority phase 8 · server generals, magic, cultivation and Prestige</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -843,7 +844,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
 <div id="toasts"></div>
 <div id="fx"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
 <script>
 "use strict";
 
@@ -913,6 +914,21 @@ async function gameApi(action,payload={},options={}){
     throw error;
   }
   return result;
+}
+function isTransientApiError(error){
+  return !error||!error.status||error.status>=500;
+}
+async function gameApiWithRetry(action,payload={},options={}){
+  let lastError;
+  for(let attempt=0;attempt<2;attempt++){
+    try{return await gameApi(action,payload,options);}
+    catch(error){
+      lastError=error;
+      if(!isTransientApiError(error)||attempt===1)throw error;
+      await new Promise(resolve=>setTimeout(resolve,350));
+    }
+  }
+  throw lastError||new Error('The server request failed.');
 }
 async function registerAccount(){
   const username=normalizeUsername($('registerUsername').value),password=$('registerPassword').value,confirmPassword=$('registerPasswordConfirm').value;
@@ -2255,12 +2271,7 @@ function applyAuthoritativeEnvelope(result){
   if(result&&result.authorityPhase!==undefined)AUTHORITY_PHASE=Number(result.authorityPhase)||0;
   if(result&&result.rates)SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates);
   const serverState=result&&result.state;
-  if(!serverState||!serverState.S||!S)return;
-  const source=serverState.S;
-  for(const key of AUTH_GAME_KEYS)if(Object.prototype.hasOwnProperty.call(source,key))S[key]=copyJson(source[key]);
-  S.st=S.st||{};const stats=source.st||{};
-  for(const key of AUTH_STAT_KEYS)if(Object.prototype.hasOwnProperty.call(stats,key))S.st[key]=copyJson(stats[key]);
-  if(serverState.META){
+  if(serverState&&serverState.META){
     const previousAch=Object.assign({},META.ach||{});
     for(const key of AUTH_META_KEYS)if(Object.prototype.hasOwnProperty.call(serverState.META,key))META[key]=copyJson(serverState.META[key]);
     const unlocked=Object.keys(META.ach||{}).filter(id=>META.ach[id]&&!previousAch[id]);
@@ -2270,11 +2281,19 @@ function applyAuthoritativeEnvelope(result){
     }
     if(unlocked.length)renderAch();
   }
+  if(result&&result.world)presentWorldResult({result:result.world});
+  if(!serverState||!serverState.S||!S)return;
+  const source=serverState.S;
+  for(const key of AUTH_GAME_KEYS)if(Object.prototype.hasOwnProperty.call(source,key))S[key]=copyJson(source[key]);
+  S.st=S.st||{};const stats=source.st||{};
+  for(const key of AUTH_STAT_KEYS)if(Object.prototype.hasOwnProperty.call(stats,key))S.st[key]=copyJson(stats[key]);
 }
+
 async function runServerAction(type,payload={},quiet=false){
   if(!ACCOUNT||!S||saveConflict)return null;
   if(actionBusy){toast('Server action pending','Wait for the current order to finish.','bad');return null;}
   clearTimeout(saveTimer);
+  while(saveBusy)await new Promise(resolve=>setTimeout(resolve,40));
   if(saveDirty){
     const saved=await flushServerSave(false);
     if(!saved)return null;
@@ -2283,15 +2302,7 @@ async function runServerAction(type,payload={},quiet=false){
   try{
     const actionId=crypto.randomUUID();
     const request={revision:SERVER_REVISION,actionId,type,payload};
-    let result;
-    for(let attempt=0;attempt<2;attempt++){
-      try{result=await gameApi('game-action',request);break;}
-      catch(error){
-        const transient=!error.status||error.status>=500;
-        if(!transient||attempt===1)throw error;
-        await new Promise(resolve=>setTimeout(resolve,350));
-      }
-    }
+    const result=await gameApiWithRetry('game-action',request);
     applyAuthoritativeEnvelope(result);
     lastSavedVersion=stateVersion;
     if(!quiet)toast('☁ Order confirmed','The server accepted the action.','grn');
@@ -2316,17 +2327,9 @@ function currentPreferences(){
     sound:META.sound!==false,
     hc:!!META.hc,
     bigFont:!!META.bigFont,
-    tut:!!META.tut
+    tut:!!META.tut,
+    hint:S?Math.max(0,Math.floor(Number(S.hint)||0)):0
   };
-}
-function makeSaveSnapshot(){
-  const json=JSON.stringify({S,META},(key,value)=>{
-    if(typeof value==='number'&&!Number.isFinite(value)){
-      throw new Error('A game value became too large to save safely. Reload the last server save before continuing.');
-    }
-    return value;
-  });
-  return JSON.parse(json);
 }
 function save(markChanged=true){
   if(!ACCOUNT||saveConflict)return;
@@ -2351,8 +2354,10 @@ async function flushServerSave(showToast){
     while(saveDirty&&!saveConflict){
       saveDirty=false;
       const snapshotVersion=stateVersion;
-      const result=await gameApi('save',{
+      const saveId=crypto.randomUUID();
+      const result=await gameApiWithRetry('save',{
         revision:SERVER_REVISION,
+        saveId,
         preferences:currentPreferences()
       });
       applyAuthoritativeEnvelope(result);
@@ -2695,7 +2700,12 @@ async function claimPrestige(mode){
   try{
     saveDirty=true;
     if(!await flushServerSave(false))throw new Error('The latest save could not be synchronized.');
-    const result=await gameApi('claim-prestige',{revision:SERVER_REVISION,mode:mode||'standard'});
+    const requestId=crypto.randomUUID();
+    const result=await gameApiWithRetry('claim-prestige',{
+      revision:SERVER_REVISION,
+      requestId,
+      mode:mode||'standard'
+    });
     SERVER_REVISION=result.revision;META=result.state.META;S=result.state.S;GLOBAL_BOARDS.loadedAt=0;
     showStart();
     toast(mode==='gauntlet'?'🧬 ORDER GAUNTLET ARMED':'⭐ +'+fmt(result.awardedPrestige)+' Prestige',
@@ -2761,7 +2771,9 @@ function offlineGains(serverSeconds){
 
 /* ================= toasts / modal / fx / audio ================= */
 function toast(title,body,cls){const w=$('toasts');const d=document.createElement('div');
-  d.className='toast '+(cls||'');d.innerHTML='<b>'+title+'</b>'+(body?'<span>'+body+'</span>':'');
+  d.className='toast '+(cls||'');
+  const strong=document.createElement('b');strong.textContent=String(title||'');d.appendChild(strong);
+  if(body!==undefined&&body!==null&&String(body)!==''){const span=document.createElement('span');span.textContent=String(body);d.appendChild(span);}
   w.appendChild(d);while(w.children.length>5)w.firstChild.remove();
   setTimeout(()=>{d.style.transition='opacity .4s';d.style.opacity='0';setTimeout(()=>d.remove(),420);},4200);}
 let modalUp=false;
@@ -3446,7 +3458,8 @@ $('zReset').addEventListener('click',resetVB);
 $('hardResetBtn').addEventListener('click',()=>{
   showModal('☠ DELETE ACCOUNT PROGRESS','<p>Erase the active run, all Prestige, upgrades, honors and validated leaderboard scores for this account. The login itself remains available.</p>',
     [{t:'Keep my empire'},{t:'Erase progress',cls:'danger',fn:async()=>{try{
-      const result=await gameApi('reset',{revision:SERVER_REVISION});SERVER_REVISION=result.revision;META=result.state.META;S=null;GLOBAL_BOARDS.loadedAt=0;showStart();toast('Account reset','All game progress and scores were deleted.','bad');
+      const requestId=crypto.randomUUID();
+      const result=await gameApiWithRetry('reset',{revision:SERVER_REVISION,requestId});SERVER_REVISION=result.revision;META=result.state.META;S=null;GLOBAL_BOARDS.loadedAt=0;showStart();toast('Account reset','All game progress and scores were deleted.','bad');
     }catch(error){toast('Reset failed',error.message,'bad');}}}]);});
 async function renderStartLB(){
   $('lbStart').innerHTML='<p class="note">Loading global leaderboards…</p>';
@@ -3500,8 +3513,14 @@ $('startBtn').addEventListener('click',async()=>{
   const doctrines={nocas:$('chNocas').checked,speed:$('chSpeed').checked,tiny:$('chTiny').checked};
   $('startBtn').disabled=true;
   try{
-    const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines});
-    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||7;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
+    const requestId=crypto.randomUUID();
+    const result=await gameApiWithRetry('start-run',{
+      revision:SERVER_REVISION,
+      requestId,
+      country:code,
+      doctrines
+    });
+    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||8;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
     enterGame();
     const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The server has opened a validated run.','grn');
   }catch(error){toast('Campaign could not start',error.message,'bad');}
@@ -3528,17 +3547,14 @@ function renderSpeed(){const w=$('speedRow');if(!w||!S)return;w.innerHTML='';
 function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
   raw=clamp(raw,0,5);if(!S)return;updateMegaTimer();updateZTimer();
   let dt=raw*(S.speed===undefined?1:S.speed);
-  saveAcc+=raw;if(saveAcc>=5){saveAcc=0;if(!actionBusy)save(false);}
+  saveAcc+=raw;if(saveAcc>=15){saveAcc=0;if(!actionBusy)save(false);}
   if(dt<=0){uiAcc+=raw;if(uiAcc>=0.25){uiAcc=0;updateTop();updateCards();updateMap();}return;}
   const rt=rates();
   // Phase 2: resources, aging, training totals and tension are settled by the server.
   if(S.auto&&S.tech.staff&&(!S.target||S.conq[S.target])&&!actionBusy&&Date.now()>=autoTargetAt){
     autoTargetAt=Date.now()+1500;const w=weakestFoe();if(w)void setSiege(w);}
   combatTick(raw);
-  // Infinite-rift challenges are evaluated by the server through world pulses.
-  if(!modalUp&&AUTHORITY_PHASE>=3&&!actionBusy){
-    const a=S.serverAuth||{},next=Math.min(Date.parse(a.nextEventAt||0)||Infinity,Date.parse(a.nextRaidAt||0)||Infinity,Date.parse(a.nextRiftAt||0)||Infinity);
-    if(a.pendingEvent||Date.now()>=next)void fireEvent();}
+  // World events are settled automatically by every canonical server request.
   uiAcc+=raw;if(uiAcc>=0.25){uiAcc=0;
     updateTop();updateCards();updateMap();updateBuildings();updateBranches();updateTechs();
     updatePacts();updateShop();updateSpells();if(!$('tab-pokemon').classList.contains('hidden'))renderPokemon();updateRealmBtn();updatePrestige();}
@@ -3586,6 +3602,7 @@ async function boot(){
     // Reopen those flags until the newly-added Kalos territories are conquered.
     if(!planeClearedId('pokemon')){delete S.pc.pokemon;if(S.won)S.won=false;}
     enterGame();
+    if(loaded.world)presentWorldResult({result:loaded.world});
     const g=loaded.economyGain;
     if(g&&Number(g.dt)>=60){
       showModal('🕰️ SERVER-VERIFIED OFFLINE GAINS',
