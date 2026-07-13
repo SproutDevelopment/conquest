@@ -842,7 +842,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authority phase 8.4 · optimistic UI, canonical Supabase state</footer>
+  <footer>IRON MANDATE · authority phase 8.9 · full rollback and latency audit</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -892,7 +892,7 @@ function showAuth(){
   serverActionActiveBatch=null;serverActionSending=false;
   clearTimeout(serverActionTimer);serverActionTimer=null;
   clearOptimisticCanonical();
-  mobilizePending=0;mobilizeSending=false;clearTimeout(mobilizeTimer);mobilizeTimer=null;
+  targetIntentSeq=0;targetIntentCode='';targetIntentPending=false;clearCombatVisual();
   AUTHORITY_PHASE=0;SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
   stateVersion=0;lastSavedVersion=0;
   clearTimeout(saveTimer);saveTimer=null;
@@ -971,7 +971,7 @@ async function loginAccount(){
 async function logoutAccount(){
   if(ACCOUNT){
     saveDirty=true;
-    const saved=await flushServerSave(false);
+    const saved=await flushServerSave(false,true);
     if(!saved){
       toast('Logout paused','Your latest progress has not reached the server. Resolve the sync error or reload before logging out.','bad');
       return;
@@ -1932,7 +1932,6 @@ async function attemptLegend(id){
     toast(r.captured?'🌟 LEGENDARY BOND FORGED':'✨ SANCTUM PHASE '+r.phase+'/3',
       r.captured?((legendPokemon(id)||{n:id}).n+' joined the roster.'):(l&&l.ph?r.phase&&l.ph[r.phase-1]:'Phase complete'),
       r.captured?'grn':'cyan');
-    renderPokemon();
   }
 }
 function renderLegends(){if(!$('legendGrid'))return;$('legendCount').textContent=LEGEND_CHALLENGES.filter(l=>hasLegend(l.id)).length;$('legendPhases').textContent=legendTotalPhases();$('legendBuffCount').textContent=LEGEND_CHALLENGES.filter(l=>hasLegend(l.id)).length;$('legendGrid').innerHTML='';
@@ -1971,7 +1970,6 @@ async function fightRival(id){
     sfx('realm');
     toast((r?r.ico:'⚔️')+' RIVAL TEAM DEFEATED',
       '+'+fmt(Number(x.reward)||0)+' Battle Points · '+fmt(Number(x.cells)||0)+' Zygarde Cells','grn');
-    renderPokemon();
   }
 }
 function specialUnlocked(x){return hasLegend(x.base)&&rivalWins(x.rival)>=x.wins;}
@@ -1980,7 +1978,7 @@ async function challengeSpecial(id){
   const result=await runServerAction('poke-special',{id},true);
   if(result){
     const x=SPECIAL_FORMS.find(v=>v.id===id);
-    sfx('realm');toast('✨ SPECIAL FORM UNLOCKED',x?x.n:id,'grn');renderPokemon();
+    sfx('realm');toast('✨ SPECIAL FORM UNLOCKED',x?x.n:id,'grn');
   }
 }
 function zygardeFormName(){const c=S.poke.zygardeCells||0;return c>=100?'Zygarde Complete Forme':c>=50?'Zygarde 50% Forme':c>=10?'Zygarde 10% Forme':'Zygarde Core';}
@@ -2034,13 +2032,12 @@ async function fightChampionship(id){
     sfx('realm');
     toast(id==='world'?'🌐 WORLD RANK '+r.worldRank:(c?c.ico+' '+c.n:'CHAMPIONSHIP CLEARED'),
       '+'+fmt(Number(r.reward)||0)+' Battle Points','grn');
-    renderPokemon();
   }
 }
 
 async function buyTraining(id){
   const result=await runServerAction('poke-training',{id},true);
-  if(result){sfx('buy');renderPokemon();}
+  if(result){sfx('buy');}
 }
 function renderWorldCircuit(){if(!$('champGrid')||!S||!S.poke)return;$('battlePoints').textContent=fmt(S.poke.battlePoints||0);$('worldRank').textContent=S.poke.worldRank||0;$('champStreak').textContent=S.poke.champStreak||0;$('champGrid').innerHTML='';
   for(const c of CHAMPIONSHIPS){const un=championshipUnlocked(c),r=trainerRating(),m=pokemonMastery(),rr=championshipReq(c),mr=championshipMastery(c),d=document.createElement('div');d.className='champcard '+(un?'':'locked');d.innerHTML='<div class="hd"><span class="ico">'+c.ico+'</span><span>'+c.n+'</span><span class="rank">W '+((S.poke.champWins[c.id]||0))+'</span></div><div class="ds">'+c.d+'</div><div class="req">Rating '+fmt(r)+' / '+fmt(rr)+' · Mastery '+fmt(m)+' / '+fmt(mr)+'</div><button>'+(un&&r>=rr&&m>=mr?'ENTER CHAMPIONSHIP':un?'NOT READY':'LOCKED')+'</button>';const b=d.querySelector('button');b.disabled=!un||r<rr||m<mr;b.onclick=()=>fightChampionship(c.id);$('champGrid').appendChild(d);}
@@ -2066,7 +2063,6 @@ async function breedPokemon(){
   if(result&&result.result){
     const p=POKEMON.find(x=>x.id===result.result.egg.species);
     sfx('buy');toast('🥚 EGG RECEIVED',(p?p.n:'Pokémon')+' egg entered a server-timed incubator.','cyan');
-    renderPokemon();
   }
 }
 
@@ -2077,12 +2073,51 @@ async function hatchEgg(id){
     sfx('realm');
     toast(r.shiny?'✨ SHINY HATCHED':'🥚 EGG HATCHED',
       (p?p.n:r.species)+' · Bond '+fmt(Number(r.bond)||0),'grn');
-    renderPokemon();
   }
 }
 function renderNursery(){if(!$('eggGrid')||!S||!S.poke)return;const unlocked=nurseryUnlocked(),owned=POKEMON.filter(p=>!p.legend&&S.poke.owned[p.id]);$('eggCount').textContent=S.poke.eggs.length;$('shinyCount').textContent=Object.keys(S.poke.shiny||{}).length;$('traitCount').textContent=Object.keys(S.poke.traits||{}).length;
   const opts='<option value="">Choose partner</option>'+owned.map(p=>'<option value="'+p.id+'">'+pokeForm(p).n+' · Bond '+S.poke.owned[p.id]+'</option>').join('');$('breedParentA').innerHTML=opts;$('breedParentB').innerHTML=opts;$('breedBtn').disabled=!unlocked||owned.length<2||S.poke.eggs.length>=eggLimit()||S.poke.battlePoints<breedingCost();$('breedBtn').textContent=!unlocked?'UNLOCKS AFTER 16 BADGES':'CREATE EGG — '+fmt(breedingCost())+' 🏅';$('breedInfo').textContent='Incubation '+Math.ceil(eggIncubation()/60000)+' min · shiny chance '+(shinyChance()*100).toFixed(2)+'% · eggs '+S.poke.eggs.length+'/'+eggLimit();
-  $('eggGrid').innerHTML='';for(const e of S.poke.eggs){const p=POKEMON.find(x=>x.id===e.species),left=Math.max(0,e.hatchAt-Date.now()),ready=!left,d=document.createElement('div');d.className='eggcard'+(ready?' ready':'');d.innerHTML='<span class="eggico">🥚</span><div class="enm">'+(p?p.n:'Unknown')+' Egg</div><div class="small">Inherited potential hidden</div><div class="etime">'+(ready?'READY TO HATCH':Math.ceil(left/1000)+'s remaining')+'</div><button>'+(ready?'HATCH EGG':'INCUBATING')+'</button>';const b=d.querySelector('button');b.disabled=!ready;b.onclick=()=>hatchEgg(e.id);$('eggGrid').appendChild(d);}if(!S.poke.eggs.length)$('eggGrid').innerHTML='<p class="note">No eggs are incubating. Pair two captured partners to begin.</p>';}
+  $('eggGrid').innerHTML='';for(const e of S.poke.eggs){const p=POKEMON.find(x=>x.id===e.species),left=Math.max(0,e.hatchAt-Date.now()),ready=!left,d=document.createElement('div');d.className='eggcard'+(ready?' ready':'');d.dataset.eggId=String(e.id);d.innerHTML='<span class="eggico">🥚</span><div class="enm">'+(p?p.n:'Unknown')+' Egg</div><div class="small">Inherited potential hidden</div><div class="etime">'+(ready?'READY TO HATCH':Math.ceil(left/1000)+'s remaining')+'</div><button>'+(ready?'HATCH EGG':'INCUBATING')+'</button>';const b=d.querySelector('button');b.disabled=!ready;b.onclick=()=>hatchEgg(e.id);$('eggGrid').appendChild(d);}if(!S.poke.eggs.length)$('eggGrid').innerHTML='<p class="note">No eggs are incubating. Pair two captured partners to begin.</p>';}
+function updateEggTimers(){
+  if(!S||!S.poke||!$('eggGrid'))return;
+  for(const card of $('eggGrid').querySelectorAll('.eggcard[data-egg-id]')){
+    const egg=S.poke.eggs.find(item=>String(item.id)===String(card.dataset.eggId));
+    if(!egg)continue;
+    const left=Math.max(0,Number(egg.hatchAt)-Date.now()),ready=left<=0;
+    card.classList.toggle('ready',ready);
+    const time=card.querySelector('.etime'),button=card.querySelector('button');
+    if(time)time.textContent=ready?'READY TO HATCH':Math.ceil(left/1000)+'s remaining';
+    if(button){button.disabled=!ready;button.textContent=ready?'HATCH EGG':'INCUBATING';}
+  }
+}
+function updateRaidTimer(){
+  if(!S||!S.poke||!$('raidGrid'))return;
+  const button=$('raidGrid').querySelector('button');if(!button)return;
+  const left=Math.max(0,Number(S.poke.raidCooldown||0)-Date.now());
+  button.disabled=!S.poke.dmaxBand||left>0;
+  button.textContent=S.poke.dmaxBand?(left?'Next raid '+Math.ceil(left/1000)+'s':'CHALLENGE MAX RAID'):'CLEAR DYNAMAX BAND TRIAL';
+}
+let pokemonLiveRenderKey='';
+function pokemonLiveStateKey(){
+  if(!S||!S.poke)return'';
+  const p=S.poke,now=Date.now();
+  return[
+    megaActiveId()||'',megaCooldownRemaining()>0?1:0,
+    zActive()?1:0,zCooldownRemaining()>0?1:0,
+    dmaxActiveId()||'',dmaxCooldownRemaining()>0?1:0,
+    teraActiveId()||'',teraCooldownRemaining()>0?1:0,
+    Number(p.raidCooldown||0)>now?1:0,
+    (p.eggs||[]).map(egg=>String(egg.id)+':'+(Number(egg.hatchAt)<=now?1:0)).join(',')
+  ].join('|');
+}
+function updatePokemonLive(){
+  if(!S||!S.poke)return;
+  updateMegaTimer();updateZTimer();updateDmaxTimer();updateTeraTimer();
+  updateEggTimers();updateRaidTimer();
+  const key=pokemonLiveStateKey();
+  if(key!==pokemonLiveRenderKey)renderPokemon();
+}
+
 
 function pokemonUnlocked(){return planeUnlockedId('pokemon');}
 function pokemonHeld(){return planeTerrs('pokemon').filter(t=>S.conq[t.code]).length;}
@@ -2100,9 +2135,9 @@ function canTerastalize(p){return !!(p&&S.poke.teraOrb&&S.poke.teraShards>0&&S.p
 async function activateTera(id){
   const result=await runServerAction('poke-activate-tera',{id},true);
   if(result&&result.result&&result.result.blocked){
-    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');renderPokemon();return;
+    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');return;
   }
-  if(result){sfx('realm');toast('💠 TERASTALIZATION','The server started the crystal timer.','cyan');renderPokemon();}
+  if(result){sfx('realm');toast('💠 TERASTALIZATION','The server started the crystal timer.','cyan');}
 }
 
 function updateTeraTimer(){
@@ -2122,9 +2157,9 @@ function canDynamax(p){return !!(p&&S.poke.dmaxBand&&S.poke.team.includes(p.id)&
 async function activateDmax(id){
   const result=await runServerAction('poke-activate-dmax',{id},true);
   if(result&&result.result&&result.result.blocked){
-    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');renderPokemon();return;
+    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');return;
   }
-  if(result){sfx('realm');toast(GMAX_FORMS[id]?'🌌 GIGANTAMAX':'🏟️ DYNAMAX','The server started the transformation timer.','cyan');renderPokemon();}
+  if(result){sfx('realm');toast(GMAX_FORMS[id]?'🌌 GIGANTAMAX':'🏟️ DYNAMAX','The server started the transformation timer.','cyan');}
 }
 
 function updateDmaxTimer(){
@@ -2152,9 +2187,9 @@ function canActivateMega(p){return !!(megaFormReady(p)&&S.poke.mega[p.id]&&S.pok
 async function activateMega(id){
   const result=await runServerAction('poke-activate-mega',{id},true);
   if(result&&result.result&&result.result.blocked){
-    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');renderPokemon();return;
+    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');return;
   }
-  if(result){sfx('realm');toast('💎 MEGA EVOLUTION','The server started the transformation timer.','cyan');renderPokemon();}
+  if(result){sfx('realm');toast('💎 MEGA EVOLUTION','The server started the transformation timer.','cyan');}
 }
 
 function updateMegaTimer(){
@@ -2172,9 +2207,9 @@ function zActive(){return zRemaining()>0;}
 async function activateZMove(){
   const result=await runServerAction('poke-activate-z',{},true);
   if(result&&result.result&&result.result.blocked){
-    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');renderPokemon();return;
+    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');return;
   }
-  if(result){sfx('realm');toast('✨ Z-MOVE UNLEASHED','The server started the Z-Move timer.','cyan');renderPokemon();}
+  if(result){sfx('realm');toast('✨ Z-MOVE UNLEASHED','The server started the Z-Move timer.','cyan');}
 }
 function updateZTimer(){if(!S||!S.poke)return;const st=$('zStatus'),bt=$('zMoveBtn');if(!st||!bt)return;if(zActive())st.textContent='Active '+Math.ceil(zRemaining()/1000)+'s';else if(zCooldownRemaining())st.textContent='Cooldown '+Math.ceil(zCooldownRemaining()/1000)+'s';else st.textContent='Ready';bt.disabled=S.poke.zCrystals<1||zActive()||zCooldownRemaining()>0||!S.poke.team.length||!!megaActiveId()||!!dmaxActiveId()||!!teraActiveId();bt.textContent=zActive()?'Z-Move active':zCooldownRemaining()?'Z-Move cooling down':'Unleash Z-Move';}
 function raidStars(){return Math.min(5,1+Math.floor(pokemonRegionHeld('galar')/4));}
@@ -2187,7 +2222,6 @@ async function runMaxRaid(){
       sfx('realm');toast('🏟️ MAX RAID WON',
         '+'+fmt(Number(r.energy)||0)+' Dynamax Energy · +'+fmt(Number(r.shards)||0)+' Evolution Shards','grn');
     }else toast('Max Raid failed','Trainer Rating '+fmt(Number(r.rating)||0)+' / '+fmt(Number(r.requirement)||0),'bad');
-    renderPokemon();
   }
 }
 function renderRaids(){if(!$('raidGrid'))return;const stars=raidStars(),cd=Math.max(0,S.poke.raidCooldown-Date.now()),need=Math.floor(35000*Math.pow(1.65,stars));$('raidGrid').innerHTML='<div class="trial '+(S.poke.dmaxBand?'':'locked')+'"><div class="hd"><span class="boss">🌌</span><div>'+('★'.repeat(stars))+' Max Raid</div></div><div class="ds">A colossal Pokémon has appeared at a Wild Area power spot.</div><div class="req">Trainer Rating '+trainerRating()+' / '+need+' · Raid wins '+S.poke.raidWins+'</div><button '+(!S.poke.dmaxBand||cd?'disabled':'')+'>'+(S.poke.dmaxBand?(cd?'Next raid '+Math.ceil(cd/1000)+'s':'CHALLENGE MAX RAID'):'CLEAR DYNAMAX BAND TRIAL')+'</button></div>';const b=$('raidGrid').querySelector('button');if(b)b.onclick=runMaxRaid;}
@@ -2200,7 +2234,7 @@ function ballCost(){const b=S.poke.bought||0;return Math.floor(50000*Math.pow(1.
 
 async function buyBall(){
   const result=await runServerAction('poke-buy-ball',{},true);
-  if(result){sfx('buy');renderPokemon();}
+  if(result){sfx('buy');}
 }
 function catchChance(p){const region=Math.max(0,Math.floor((p.need||0)/18)),local=Math.min(8,BADGES.filter(b=>b[3]&&b[3].toLowerCase()===['kanto','johto','hoenn','sinnoh','unova','kalos','alola','galar','paldea'][region]&&S.badges[b[0]]).length);const base=.58+local*.035-region*.045+(hasLegend('mewtwo')?.08:0)+(hasLegend('xerneas')?.12:0)+(hasLegend('tapulele')?.06:0)+pokeTeam().reduce((a,p)=>a+((traitFor(p.id)||{}).capture||0),0)-Math.max(0,p.pow-.2)*.012;return clamp(base,.07,.88);}
 
@@ -2213,12 +2247,10 @@ async function catchPokemon(id){
       'Bond '+fmt(Number(r.bond)||0)+' · +'+fmt(Number(r.shardGain)||0)+' Evolution Shards','grn');
     sfx('realm');
   }else toast('💨 It broke free',(p?p.n:id)+' escaped the server-verified capture roll.','bad');
-  renderPokemon();
 }
 
 async function togglePokemon(id){
-  const result=await runServerAction('poke-toggle-team',{id},true);
-  if(result)renderPokemon();
+  await runServerAction('poke-toggle-team',{id},true);
 }
 
 async function evolvePokemon(id){
@@ -2226,7 +2258,6 @@ async function evolvePokemon(id){
   if(result&&result.result){
     sfx('realm');
     toast('✨ EVOLUTION',(result.result.name||id)+' reached evolution stage '+result.result.stage+'.','cyan');
-    renderPokemon();
   }
 }
 function pokemonMastery(){const bonds=Object.values(S.poke.owned||{}).reduce((a,v)=>a+Math.max(0,(Number(v)||0)-1),0);return bonds+evolutionCount()*6+badgeCount()*3+LEGEND_CHALLENGES.filter(l=>hasLegend(l.id)).length*12;}
@@ -2241,7 +2272,6 @@ async function fightTrial(id){
     sfx('realm');
     toast((t?t.ico:'🏆')+' TRIAL CLEARED',
       '+'+fmt(Number(r.shardReward)||0)+' Evolution Shards · +3 Poké Balls','grn');
-    renderPokemon();
   }
 }
 function renderPokemon(){if(!S||!$('rosterGrid'))return;
@@ -2267,7 +2297,7 @@ function renderPokemon(){if(!S||!$('rosterGrid'))return;
     let teraUI='';if(S.poke.teraOrb){if(isTera)teraUI='<div class="terastatus">TERA ACTIVE · '+Math.ceil(teraRemaining()/1000)+'s</div>';else{const tc=teraCooldownRemaining();teraUI='<button class="terabtn" '+(!canTerastalize(p)?'disabled':'')+'>'+(megaActiveId()||dmaxActiveId()||zActive()?'Another battle mechanic active':tc?'Tera cooldown · '+Math.ceil(tc/1000)+'s':!active?'Add to active team first':'Terastalize · 45s')+'</button>';}}
     d.innerHTML='<div class="who">'+pokePortrait(p,f)+'<div><div class="nm">'+f.n+(evoStage(p.id)?' ✨':'')+'</div><div class="type">'+PTYPES[f.type]+' · Bond '+bond+'</div><div class="evo-stage">Evolution '+evoStage(p.id)+' / '+evoChain(p).length+'</div></div></div><div class="stats"><span>Power +'+Math.round(f.pow*100)+'%</span><span>'+moves.length+'/3 moves</span></div><div class="movechips"><span class="abilitychip">Ability: '+abilityFor(p)+'</span>'+(traitFor(p.id)?'<span class="traitchip">Trait: '+traitFor(p.id).n+'</span>':'')+(S.poke.shiny[p.id]?'<span class="shinychip">SHINY · +20% POWER</span>':'')+(PMOVES[f.type]||[]).map((x,i)=>'<span class="movechip '+(i<moves.length?'on':'')+'">'+x+'</span>').join('')+'</div><button>'+(active?'Deactivate':'Add to team')+'</button>'+(next?'<button class="evobtn" '+(!evoReady||S.poke.shards<evoCost?'disabled':'')+'>Evolve to '+next.n+' — '+evoCost+' 💠 · Bond '+(next.bond||3)+'</button>':'')+megaUI+dmaxUI+teraUI;
     d.querySelector('button:not(.evobtn):not(.megabtn):not(.dmaxbtn):not(.terabtn)').onclick=()=>togglePokemon(p.id);const eb=d.querySelector('.evobtn');if(eb)eb.onclick=()=>evolvePokemon(p.id);const mb=d.querySelector('.megabtn');if(mb)mb.onclick=()=>S.poke.mega[p.id]?activateMega(p.id):megaEvolve(p.id);const db=d.querySelector('.dmaxbtn');if(db)db.onclick=()=>activateDmax(p.id);const tb=d.querySelector('.terabtn');if(tb)tb.onclick=()=>activateTera(p.id);$('rosterGrid').appendChild(d);}
-  if(!$('rosterGrid').children.length)$('rosterGrid').innerHTML='<p class="note">No partners captured yet. Buy a Poké Ball and search the available encounters.</p>';renderLegends();renderRaids();renderNursery();renderRivals();}
+  if(!$('rosterGrid').children.length)$('rosterGrid').innerHTML='<p class="note">No partners captured yet. Buy a Poké Ball and search the available encounters.</p>';renderLegends();renderRaids();renderNursery();renderRivals();pokemonLiveRenderKey=pokemonLiveStateKey();}
 
 /* ================= state ================= */
 function defaultMeta(){return{
@@ -2289,6 +2319,25 @@ const AUTH_META_KEYS=['pp','totPP','prestiges','best','bestCombo','shop','ending
 function copyJson(v){return typeof structuredClone==='function'?structuredClone(v):JSON.parse(JSON.stringify(v));}
 let optimisticCanonicalS=null;
 let optimisticCanonicalMeta=null;
+let optimisticStandardRecruitCount=0;
+
+function mergeAuthoritativeGameState(source){
+  const merged=Object.assign({},S||{});
+  for(const key of AUTH_GAME_KEYS){
+    if(Object.prototype.hasOwnProperty.call(source,key))merged[key]=source[key];
+  }
+  const stats=Object.assign({},S&&S.st||{}),sourceStats=source.st||{};
+  for(const key of AUTH_STAT_KEYS){
+    if(Object.prototype.hasOwnProperty.call(sourceStats,key))stats[key]=sourceStats[key];
+  }
+  merged.st=stats;
+  return merged;
+}
+function responseTransitSeconds(result){
+  const serverTime=Date.parse(String(result&&result.serverNow||''));
+  if(!Number.isFinite(serverTime))return 0;
+  return clamp((Date.now()-serverTime)/1000,0,5);
+}
 
 function optimisticNumber(value,fallback=0){
   const number=Number(value);
@@ -2468,7 +2517,14 @@ function applyOptimisticAction(type,payload){
   }
 
   if(type==='set-auto'){
-    S.auto=payload.enabled===true;
+    const enabled=payload.enabled===true;
+    if(enabled&&S.ch&&S.ch.megaZygarde){
+      S.chFail=optimisticObject(S.chFail);
+      S.chFail.megaZygarde=1;
+      S.auto=false;
+      return true;
+    }
+    S.auto=enabled;
     return true;
   }
 
@@ -2498,13 +2554,15 @@ function applyOptimisticAction(type,payload){
     const mode=String(payload.mode||'standard');
     S.summons=optimisticObject(S.summons);
     if(mode==='standard'){
-      const count=Array.isArray(S.gens)?S.gens.length:0;
+      const confirmed=Array.isArray(S.gens)?S.gens.length:0;
+      const count=confirmed+optimisticStandardRecruitCount;
       const goldCost=500*Math.pow(4,count);
       const manpowerCost=200*Math.pow(2,count);
       if(optimisticNumber(S.gold)+1e-9<goldCost||
          optimisticNumber(S.mp)+1e-9<manpowerCost)return false;
       S.gold=optimisticNumber(S.gold)-goldCost;
       S.mp=optimisticNumber(S.mp)-manpowerCost;
+      optimisticStandardRecruitCount++;
       return true;
     }
     if(mode==='heroic'){
@@ -2558,7 +2616,7 @@ function applyOptimisticAction(type,payload){
 
 function refreshOptimisticDisplay(type='',payload={}){
   updateTop();
-  updateCards();
+  if(ACTIVE_TAB==='conquest'||type==='attack'||type==='set-target')updateCards();
 
   if(type==='mobilize')return;
   if(type==='buy-building'){updateBuildings();return;}
@@ -2597,6 +2655,7 @@ function rebuildOptimisticState(){
 
   S=copyJson(optimisticCanonicalS);
   META=copyJson(optimisticCanonicalMeta||META);
+  optimisticStandardRecruitCount=0;
 
   const pending=pendingOptimisticCommands();
   for(const command of pending){
@@ -2613,7 +2672,7 @@ function rollbackAndReplayOptimisticState(){
   );
 }
 
-function applyAuthoritativeEnvelope(result){
+function applyAuthoritativeEnvelope(result,batch=null){
   if(result&&result.revision!==undefined)SERVER_REVISION=Number(result.revision);
   if(result&&result.authorityPhase!==undefined)AUTHORITY_PHASE=Number(result.authorityPhase)||0;
   if(result&&result.rates)SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates);
@@ -2634,15 +2693,21 @@ function applyAuthoritativeEnvelope(result){
     return;
   }
   const source=serverState.S;
-  for(const key of AUTH_GAME_KEYS)if(Object.prototype.hasOwnProperty.call(source,key))S[key]=copyJson(source[key]);
-  S.st=S.st||{};const stats=source.st||{};
-  for(const key of AUTH_STAT_KEYS)if(Object.prototype.hasOwnProperty.call(stats,key))S.st[key]=copyJson(stats[key]);
-
-  // This is the last fully server-confirmed state. Any still-pending commands
-  // are immediately replayed as visual predictions on top of it.
-  captureOptimisticCanonical();
+  // Store the parsed canonical response directly and clone only once when
+  // replaying pending commands. This avoids two full-state structured clones.
+  optimisticCanonicalS=mergeAuthoritativeGameState(source);
+  optimisticCanonicalMeta=copyJson(META);
   rebuildOptimisticState();
+  restoreLatestTargetIntent(batch);
   reconcileCombatVisual();
+
+  // Cover response transit so passive counters and the active siege do not
+  // visibly step backwards between server processing and browser receipt.
+  const transit=responseTransitSeconds(result);
+  if(transit>0.015){
+    applyPredictedLiveEconomy(transit);
+    predictLiveSiege(transit);
+  }
 }
 
 const SOFT_CONFIRM_ACTIONS=new Set([
@@ -2650,12 +2715,21 @@ const SOFT_CONFIRM_ACTIONS=new Set([
   'disband-branch','set-target','set-speed','set-auto','train-general',
   'set-commander','advance-realm','buy-shop'
 ]);
+function softResultMatches(command,item){
+  if(!item||!item.ok)return false;
+  if(command.type==='set-auto'){
+    const expected=command.optimisticExpectedEnabled;
+    return !!item.result&&item.result.enabled===expected;
+  }
+  return true;
+}
 function canSoftConfirmBatch(batch,envelope,resultList){
   return !envelope.world&&batch.commands.length>0&&
     batch.commands.every(command=>SOFT_CONFIRM_ACTIONS.has(command.type))&&
-    resultList.length===batch.commands.length&&resultList.every(item=>item&&item.ok);
+    resultList.length===batch.commands.length&&
+    resultList.every((item,index)=>softResultMatches(batch.commands[index],item));
 }
-function softConfirmEnvelope(result){
+function softConfirmEnvelope(result,batch=null){
   if(result&&result.revision!==undefined)SERVER_REVISION=Number(result.revision);
   if(result&&result.authorityPhase!==undefined)AUTHORITY_PHASE=Number(result.authorityPhase)||0;
   if(result&&result.rates)SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates);
@@ -2671,15 +2745,23 @@ function softConfirmEnvelope(result){
     if(unlocked.length)renderAch();
   }
   if(state&&state.S){
-    optimisticCanonicalS=copyJson(state.S);
+    optimisticCanonicalS=mergeAuthoritativeGameState(state.S);
     optimisticCanonicalMeta=copyJson(state.META||META);
   }
+  restoreLatestTargetIntent(batch);
   reconcileCombatVisual();
 }
 
 const SERVER_ACTION_BATCH_MAX=20;
 const SERVER_ACTION_QUEUE_MAX=200;
 const SERVER_ACTION_FLUSH_MS=35;
+const CLIENT_VALIDATED_ACTIONS=new Set([
+  'buy-building','buy-tech','set-law','sign-pact','train-branch',
+  'disband-branch','set-target','attack','set-speed','set-auto',
+  'train-general','set-commander','recruit-general','advance-realm','buy-shop'
+]);
+const IDLE_SAVE_DELAY_MS=1800;
+let lastGameplayInputAt=0;
 let serverActionQueue=[];
 let serverActionTimer=null;
 let serverActionSending=false;
@@ -2730,7 +2812,7 @@ function refreshAfterActionBatch(types){
   // These mutate text, progress bars and disabled states only. They do not
   // destroy/recreate the page, so buttons stay under the pointer.
   updateTop();
-  updateCards();
+  if(ACTIVE_TAB==='conquest'||changed.has('attack')||changed.has('set-target'))updateCards();
 
   if(changed.has('buy-building'))updateBuildings();
   if(changed.has('buy-tech'))updateTechs();
@@ -2758,6 +2840,7 @@ function refreshAfterActionBatch(types){
 
   if(changed.has('buy-shop'))renderShop();
   if(changed.has('cast-spell'))renderSpells();
+  if([...changed].some(type=>type.startsWith('poke-')))renderPokemon();
 
   if(changed.has('attack')||changed.has('set-target')){
     refreshTargets();
@@ -2821,8 +2904,8 @@ async function flushServerActionQueue(){
     serverActionDelayToastShown=false;
     const resultList=Array.isArray(envelope.results)?envelope.results:[];
     const softConfirmed=canSoftConfirmBatch(batch,envelope,resultList);
-    if(softConfirmed)softConfirmEnvelope(envelope);
-    else applyAuthoritativeEnvelope(envelope);
+    if(softConfirmed)softConfirmEnvelope(envelope,batch);
+    else applyAuthoritativeEnvelope(envelope,batch);
     lastSavedVersion=stateVersion;
 
     const byId=new Map(resultList.map(item=>[String(item.actionId||''),item]));
@@ -2901,13 +2984,14 @@ async function flushServerActionQueue(){
     }else if(serverActionQueue.length>0){
       scheduleServerActionFlush(10);
     }else if(saveDirty){
-      void flushServerSave(false);
+      scheduleIdleSave();
     }
   }
 }
 
 function runServerAction(type,payload={},quiet=false){
   if(!ACCOUNT||!S||saveConflict)return Promise.resolve(null);
+  lastGameplayInputAt=Date.now();
 
   // Automatic siege/world pulses are coalesced so a slow connection cannot
   // create a large queue of obsolete timer actions.
@@ -2937,9 +3021,16 @@ function runServerAction(type,payload={},quiet=false){
       payload,
       quiet,
       resolve,
-      optimisticApplied:false
+      optimisticApplied:false,
+      targetIntentSeq:(type==='attack'||type==='set-target')?targetIntentSeq:0
     };
     command.optimisticApplied=applyOptimisticAction(type,payload);
+    if(type==='set-auto')command.optimisticExpectedEnabled=!!S.auto;
+    if(CLIENT_VALIDATED_ACTIONS.has(type)&&!command.optimisticApplied){
+      if(!pendingServerActionCount())clearOptimisticCanonical();
+      resolve(null);
+      return;
+    }
     serverActionQueue.push(command);
 
     updateOptimisticQueueBadge();
@@ -2962,21 +3053,44 @@ function currentPreferences(){
     hint:S?Math.max(0,Math.floor(Number(S.hint)||0)):0
   };
 }
+function scheduleIdleSave(delay=IDLE_SAVE_DELAY_MS){
+  if(!ACCOUNT||saveConflict||!saveDirty)return;
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    saveTimer=null;
+    if(!ACCOUNT||saveConflict||!saveDirty)return;
+    const idleFor=Date.now()-lastGameplayInputAt;
+    if(actionBusy||serverActionSending||serverActionQueue.length||
+       idleFor<IDLE_SAVE_DELAY_MS){
+      scheduleIdleSave(Math.max(100,IDLE_SAVE_DELAY_MS-idleFor));
+      return;
+    }
+    void flushServerSave(false,false);
+  },Math.max(0,delay));
+}
 function save(markChanged=true){
   if(!ACCOUNT||saveConflict)return;
   if(markChanged)stateVersion++;
   saveDirty=true;
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>{void flushServerSave(false);},500);
+  scheduleIdleSave();
 }
-async function flushServerSave(showToast){
+async function flushServerSave(showToast,force=false){
   if(!ACCOUNT||saveConflict)return false;
+  clearTimeout(saveTimer);saveTimer=null;
+  if(!force){
+    const idleFor=Date.now()-lastGameplayInputAt;
+    if(actionBusy||serverActionSending||serverActionQueue.length||
+       idleFor<IDLE_SAVE_DELAY_MS){
+      scheduleIdleSave(Math.max(100,IDLE_SAVE_DELAY_MS-idleFor));
+      return true;
+    }
+  }
   if(actionBusy){
     while(actionBusy)await new Promise(resolve=>setTimeout(resolve,40));
   }
   if(saveBusy){
     while(saveBusy)await new Promise(resolve=>setTimeout(resolve,40));
-    if(saveDirty)return flushServerSave(showToast);
+    if(saveDirty)return flushServerSave(showToast,force);
     return !saveConflict;
   }
 
@@ -3017,19 +3131,23 @@ async function flushServerSave(showToast){
       toast('☁ Save conflict','This account changed in another tab or device. Reload before continuing so progress is not overwritten.','bad');
       if(!$('modalWrap').classList.contains('hidden'))closeModal();
       showModal('☁ SAVE CONFLICT',
-        '<p>The account was changed in another tab or device. Automatic saving has stopped to prevent overwriting the server copy.</p>'+
+        '<p>The account was changed in another tab or device. Automatic saving has stopped to prevent overwriting the server copy.</p>'+ 
         '<p class="small" style="margin-top:8px">Reload this page to continue from the canonical server save.</p>',
         [{t:'Reload server save',fn:()=>location.reload()}]);
     }else{
       saveDirty=true;
       if(status)status.innerHTML='<span class="red">Sync failed:</span> '+htmlEscape(error.message);
       if(showToast)toast('☁ Save failed',error.message,'bad');
+      else scheduleIdleSave(2500);
     }
   }finally{
     saveBusy=false;
   }
 
-  if(ok&&saveDirty&&!saveConflict)return flushServerSave(showToast);
+  if(ok&&saveDirty&&!saveConflict){
+    if(force)return flushServerSave(showToast,true);
+    scheduleIdleSave();
+  }
   return ok&&!saveConflict;
 }
 
@@ -3115,6 +3233,40 @@ function aliveAllies(c){if(!c.bloc)return 0;let n=0;
 function pactActive(b){return S.pacts[b]>Date.now();}
 function resFactor(){return Math.pow(1.022,Math.max(0,conqCount()-1));}
 let COMBAT_VISUAL_HP={};
+let targetIntentSeq=0,targetIntentCode='',targetIntentPending=false;
+function noteTargetIntent(code){
+  targetIntentSeq+=1;
+  targetIntentCode=String(code||'');
+  targetIntentPending=true;
+  return targetIntentSeq;
+}
+function batchTargetIntentSeq(batch){
+  if(!batch||!Array.isArray(batch.commands))return 0;
+  let latest=0;
+  for(const command of batch.commands){
+    latest=Math.max(latest,Number(command&&command.targetIntentSeq)||0);
+  }
+  return latest;
+}
+function restoreLatestTargetIntent(batch){
+  if(!S||!targetIntentPending)return;
+  const acknowledged=batchTargetIntentSeq(batch);
+  const intended=targetIntentCode;
+
+  if(intended&&S.conq&&S.conq[intended]){
+    targetIntentPending=false;
+    targetIntentCode='';
+    return;
+  }
+
+  if(acknowledged>=targetIntentSeq&&String(S.target||'')===intended){
+    targetIntentPending=false;
+    return;
+  }
+
+  // An older response must never overwrite a newer click on another country.
+  S.target=intended||null;
+}
 function canonicalDefenseRemaining(c){
   return (S.hp[c.code]!==undefined)?Number(S.hp[c.code]):defOf(c);
 }
@@ -3147,58 +3299,61 @@ function expCas(c){const i=effInfo(c),AP=armyPower();
   return AP>0?i.eff/(i.eff+AP)*0.035*casMult():0.035*casMult();}
 
 /* ================= core actions ================= */
-let mobilizePending=0,mobilizeTimer=null,mobilizeSending=false;
 const MOBILIZE_BATCH_MAX=60;
-const MOBILIZE_FLUSH_MS=120;
-
-function scheduleMobilizeFlush(delay=MOBILIZE_FLUSH_MS){
-  if(mobilizeTimer||mobilizeSending||mobilizePending<1)return;
-  mobilizeTimer=setTimeout(()=>{
-    mobilizeTimer=null;
-    void flushMobilizeQueue();
-  },delay);
+function queuedMobilizeCommand(){
+  // Merge only with the newest queued command. Crossing another action would
+  // change command order and could use the wrong click-power multiplier.
+  const command=serverActionQueue[serverActionQueue.length-1];
+  return command&&command.type==='mobilize'&&
+    Number(command.payload&&command.payload.count)<MOBILIZE_BATCH_MAX
+    ?command:null;
 }
+function enqueueMobilizeClick(){
+  if(!S||!ACCOUNT||saveConflict)return false;
+  lastGameplayInputAt=Date.now();
+  if(!optimisticCanonicalS)captureOptimisticCanonical();
 
-async function flushMobilizeQueue(){
-  if(mobilizeSending||mobilizePending<1||!ACCOUNT||!S||saveConflict)return;
-
-  // Never discard clicks just because another server order or preference save
-  // is currently finishing. Keep them queued and try again shortly.
-  if(saveBusy){
-    scheduleMobilizeFlush(45);
-    return;
-  }
-
-  mobilizeSending=true;
-  const count=Math.min(MOBILIZE_BATCH_MAX,mobilizePending);
-  mobilizePending-=count;
-
-  try{
-    const result=await runServerAction('mobilize',{count},true);
-    if(result&&result.result){
-      const gained=Number(result.result.gained)||0;
-      floatAtEl($('seal'),'+'+fmt(gained),'');
-    }else{
-      // Network or temporary server failure: restore this batch rather than
-      // losing clicks.
-      mobilizePending=Math.min(5000,mobilizePending+count);
+  let command=queuedMobilizeCommand();
+  if(!command){
+    if(pendingServerActionCount()>=SERVER_ACTION_QUEUE_MAX){
+      toast('☁ Order queue full','The connection is too far behind. This click was not added.','bad');
+      return false;
     }
-  }finally{
-    mobilizeSending=false;
-    if(mobilizePending>0)scheduleMobilizeFlush(35);
+    command={
+      actionId:crypto.randomUUID(),
+      type:'mobilize',
+      payload:{count:0},
+      quiet:true,
+      resolve:()=>{},
+      optimisticApplied:true,
+      targetIntentSeq:0
+    };
+    serverActionQueue.push(command);
   }
-}
 
+  // Match the original local game exactly: each click changes manpower before
+  // any request is sent. The command count is replayed after older responses.
+  const gained=clickPow();
+  command.payload.count=Number(command.payload.count||0)+1;
+  S.mp=Math.max(0,Number(S.mp)||0)+gained;
+  S.clicks=Math.max(0,Number(S.clicks)||0)+1;
+  S.st=optimisticObject(S.st);
+  S.st.mpRec=Math.max(0,Number(S.st.mpRec)||0)+gained;
+
+  updateOptimisticQueueBadge();
+  updateTop();
+  if(Number(command.payload.count)>=MOBILIZE_BATCH_MAX)scheduleServerActionFlush(0);
+  else scheduleServerActionFlush();
+  return gained;
+}
 function doClick(){
   if(!S||AUTHORITY_PHASE<2)return;
-  mobilizePending=Math.min(5000,mobilizePending+1);
-
-  // Immediate local feedback keeps the clicker responsive while Supabase
-  // verifies the accumulated batch.
-  floatAtEl($('seal'),mobilizePending>1?'Mobilize ×'+mobilizePending:'Mobilize','');
+  const gained=enqueueMobilizeClick();
+  if(gained===false)return;
+  floatAtEl($('seal'),'+'+fmt(gained),'');
   sfx('click');
-  scheduleMobilizeFlush();
 }
+
 function buyNFor(b){if(S.buyN==='max'){const r=1.17,a=b.base*Math.pow(r,S.b[b.id]);
     return Math.max(0,Math.floor(Math.log(S.gold*(r-1)/a+1)/Math.log(r)));}
   return S.buyN;}
@@ -3287,12 +3442,17 @@ function queueSiegeHeartbeat(code){
     if(result)showCombatResult(result,true);
   });
 }
-function removeQueuedSiegeOrders(){
+function removeQueuedSiegeOrders(keepCode=''){
   const kept=[];
   for(const command of serverActionQueue){
-    if(command.type==='attack'&&command.payload&&command.payload.mode==='siege'){
-      command.resolve(null);
-    }else kept.push(command);
+    const payload=command.payload||{};
+    const commandCode=String(payload.code||'');
+    const obsoleteSiege=command.type==='attack'&&payload.mode==='siege'&&
+      (!keepCode||commandCode!==keepCode);
+    const obsoleteTarget=command.type==='set-target'&&
+      (!keepCode||commandCode!==keepCode);
+    if(obsoleteSiege||obsoleteTarget)command.resolve(null);
+    else kept.push(command);
   }
   serverActionQueue=kept;
   updateServerActionBusy();
@@ -3304,20 +3464,39 @@ function selectAttackTargetInstantly(code){
   const gate=canSiege(country);
   if(gate){toast('🔒 '+country.name,gate,'bad');return false;}
 
-  const oldTarget=S.target;
-  removeQueuedSiegeOrders();
-  if(oldTarget&&oldTarget!==code)clearCombatVisual(oldTarget);
-  S.target=code;
-  COMBAT_VISUAL_HP[code]=canonicalDefenseRemaining(country);
+  const oldTarget=String(S.target||'');
+  const changed=oldTarget!==code;
+  if(changed){
+    removeQueuedSiegeOrders(code);
+    if(oldTarget)clearCombatVisual(oldTarget);
+    noteTargetIntent(code);
+    S.target=code;
+  }else if(!targetIntentPending){
+    // Re-clicking the same country is not a new target change and must not
+    // reset the already-depleted visual defence.
+    targetIntentCode=code;
+  }
+
+  if(COMBAT_VISUAL_HP[code]===undefined){
+    COMBAT_VISUAL_HP[code]=canonicalDefenseRemaining(country);
+  }
   serverCombatAcc=0;
   refreshTargets();
-  updateCards();
-  updateMap();
+  updateCard(code);
+  updateMapTerritory(code);
+  if(oldTarget&&oldTarget!==code){
+    updateCard(oldTarget);
+    updateMapTerritory(oldTarget);
+  }
   return true;
 }
+
 async function setSiege(code){
+  const changed=String(S&&S.target||'')!==String(code||'');
   if(!selectAttackTargetInstantly(code))return;
-  predictLiveSiege(0.12);
+  // Starting a new siege gets immediate visual movement. Re-clicking the same
+  // target does not manufacture extra siege time or reset its defence.
+  if(changed)predictLiveSiege(0.05);
   serverCombatAcc=0;
   queueSiegeHeartbeat(code);
 }
@@ -3326,6 +3505,7 @@ async function toggleSiege(code){
   if(S.target===code){
     removeQueuedSiegeOrders();
     const oldTarget=S.target;
+    noteTargetIntent('');
     S.target=null;
     clearCombatVisual(oldTarget);
     serverCombatAcc=0;
@@ -3354,21 +3534,28 @@ function showCombatResult(envelope,quiet){
     clearCombatVisual(r.code);
     refreshTargets();updateCards();updateMap();updateRegionTabs();updateTop();
   }else if(quiet&&r.code){
+    restoreLatestTargetIntent(null);
     reconcileCombatVisual();
-    updateCard(r.code);updateMapTerritory(r.code);updateTop();
+    updateCard(r.code);updateMapTerritory(r.code);
+    if(S.target&&S.target!==r.code){updateCard(S.target);updateMapTerritory(S.target);}
+    updateTop();
   }else{
     refreshTargets();updateCards();updateMap();updateRegionTabs();updateTop();
   }
 }
 async function burst(code,quiet){
   if(!selectAttackTargetInstantly(code))return;
+  const now=Date.now();
+  if(now<Number(S.stormCd||0))return;
+  S.stormCd=now+2000;
+  updateCard(code);
   const result=await runServerAction('attack',{mode:'burst',code},true);
   if(result)showCombatResult(result,!!quiet);
 }
 function combatTick(dt){
   if(AUTHORITY_PHASE<3||!S.target||S.conq[S.target]||S.mp<1)return;
   serverCombatAcc+=Math.max(0,dt);
-  if(serverCombatAcc<1.5)return;
+  if(serverCombatAcc<0.5)return;
   const code=S.target;
   if(hasPendingServerAction('attack','siege',code))return;
   serverCombatAcc=0;
@@ -3416,7 +3603,7 @@ async function recruitGeneral(mode){
   if(!result||!result.result||!result.result.general)return;
   const g=result.result.general;sfx('buy');
   toast(RARITY[g.r].ico+' '+RARITY[g.r].n+' officer',g.title+' '+g.name+' joins your staff.',g.r>=3?'grn':'');
-  if(g.r>=3)sfx('realm');renderGenerals();
+  if(g.r>=3)sfx('realm');
 }
 function trainCost(g){return Math.floor(100*Math.pow(2.2,g.lvl)*(1+g.r));}
 async function trainGeneral(id){
@@ -3463,8 +3650,8 @@ async function castSpell(id){
   else if(id==='anchor')toast('⚓ REALITY ANCHOR','Damaged territories cannot repair for 120 seconds.','cyan');
   else if(id==='transmute')toast('🜛 TRANSMUTATION','+'+fmt(Number(r.gain)||0)+' gold condenses from base matter.','cyan');
   else if(id==='warpath')toast('🌀 TELEPORTATION LEGIONS','The next conquest grants triple loot and recruits.','cyan');
-  renderSpells();refreshTargets();updateCards();
 }
+
 
 /* ================= cultivation ================= */
 function realmCost(i){return Math.floor(REALMS[i].cost*Math.max(0,1-0.2*shopLvl('tribheart')));}
@@ -3494,7 +3681,7 @@ function doPrestige(){const r=ppCalc();if(r.pp<1)return;
 async function claimPrestige(mode){
   try{
     saveDirty=true;
-    if(!await flushServerSave(false))throw new Error('The latest save could not be synchronized.');
+    if(!await flushServerSave(false,true))throw new Error('The latest save could not be synchronized.');
     const requestId=crypto.randomUUID();
     const result=await gameApiWithRetry('claim-prestige',{
       revision:SERVER_REVISION,
@@ -4038,7 +4225,8 @@ function checkAch(){
   // Server envelopes render achievements only when a new one unlocks.
 }
 
-function renderStats(){if(!S)return;const rows=[
+let STAT_REFS=[];
+function statRows(){return[
   ['Run time',timeFmt(S.playSec)],['Territories held',conqCount()+' / '+ALLT.length],
   ['Planes mastered',Object.keys(S.pc||{}).length+' / '+PLANES.length],
   ['Nations defeated',fmt(S.st.won)],['Assaults ordered',fmt(S.st.atk)],
@@ -4055,9 +4243,24 @@ function renderStats(){if(!S)return;const rows=[
   ['True endings',Object.keys(META.endings||{}).length+' / 4'],
   ['Boldest doctrine combo',META.bestCombo?(META.bestCombo.n+' doctrines · '+fmt(META.bestCombo.pp)+' PP'):'—'],
   ['Rift level (Infinite Mode)',fmt(S.infLvl||0)],
-  ['Lifetime nations taken',fmt(META.lifeWon)]];
-  $('statGrid').innerHTML=rows.map(r=>'<div class="stat"><div class="k">'+r[0]+
-    '</div><div class="v">'+r[1]+'</div></div>').join('');}
+  ['Lifetime nations taken',fmt(META.lifeWon)]
+];}
+function renderStats(){
+  if(!S)return;const rows=statRows(),grid=$('statGrid');if(!grid)return;
+  const rebuild=STAT_REFS.length!==rows.length||
+    STAT_REFS.some((ref,index)=>ref.label!==rows[index][0]||!ref.value.isConnected);
+  if(rebuild){
+    grid.innerHTML='';STAT_REFS=[];
+    for(const row of rows){
+      const card=document.createElement('div');card.className='stat';
+      const key=document.createElement('div');key.className='k';key.textContent=row[0];
+      const value=document.createElement('div');value.className='v';value.textContent=row[1];
+      card.append(key,value);grid.appendChild(card);
+      STAT_REFS.push({label:row[0],value});
+    }
+  }else rows.forEach((row,index)=>{STAT_REFS[index].value.textContent=row[1];});
+}
+
 function htmlEscape(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function fetchGlobalBoards(force){
   if(!force&&GLOBAL_BOARDS.loadedAt&&Date.now()-GLOBAL_BOARDS.loadedAt<60000)return GLOBAL_BOARDS;
@@ -4083,19 +4286,28 @@ async function renderBoards(){
   try{await fetchGlobalBoards(false);$('lbPlayers').innerHTML=playerBoardHTML(100);$('lbNations').innerHTML=nationBoardHTML(GLOBAL_BOARDS.nations.length);}
   catch(error){$('lbPlayers').innerHTML='<p class="note red">'+htmlEscape(error.message)+'</p>';}
 }
+function setHTMLIfChanged(element,value){if(element&&element.innerHTML!==value)element.innerHTML=value;}
+let lastHintRender=-1,prestigeChallengeKey='',PRESTIGE_CHALLENGE_REFS={};
 function updatePrestige(){const r=ppCalc();
   $('ppPot').textContent=fmt(r.pp);
   $('ppMath').textContent=r.n+' territories^1.25 × doctrines ×'+r.ch+' × plane multiplier ×'+Math.pow(2.2,r.planes).toFixed(2)+' ÷ 4';
-  const cl=$('chalLine');cl.innerHTML='';
-  [['nocas','🩸 Bloodless'],['speed','⚡ Lightning'],['tiny','🪶 Austere']].forEach(p=>{
-    if(!S.ch[p[0]])return;const s=document.createElement('span');
-    const ok=(p[0]==='nocas')?!S.chFail.nocas:(p[0]==='speed'?S.playSec<=1500:true);
-    s.className=ok?'ok':'bad';
-    s.textContent=p[1]+(p[0]==='speed'&&ok?' · '+timeFmt(Math.max(0,1500-S.playSec))+' left':'');
-    cl.appendChild(s);});
+  const challengeDefs=[['nocas','🩸 Bloodless'],['speed','⚡ Lightning'],['tiny','🪶 Austere']].filter(p=>S.ch[p[0]]);
+  const challengeKey=challengeDefs.map(p=>p[0]).join('|'),cl=$('chalLine');
+  if(challengeKey!==prestigeChallengeKey){
+    prestigeChallengeKey=challengeKey;PRESTIGE_CHALLENGE_REFS={};cl.innerHTML='';
+    for(const def of challengeDefs){
+      const span=document.createElement('span');cl.appendChild(span);PRESTIGE_CHALLENGE_REFS[def[0]]=span;
+    }
+  }
+  for(const def of challengeDefs){
+    const ok=(def[0]==='nocas')?!S.chFail.nocas:(def[0]==='speed'?S.playSec<=1500:true);
+    const span=PRESTIGE_CHALLENGE_REFS[def[0]];if(!span)continue;
+    span.className=ok?'ok':'bad';
+    span.textContent=def[1]+(def[0]==='speed'&&ok?' · '+timeFmt(Math.max(0,1500-S.playSec))+' left':'');
+  }
   const tt=throneTier();
-  $('throneLine').innerHTML='Ascension tier: <b class="gold">'+THRONES[tt]+'</b> (+'+(15*tt)+
-    '% all production)'+(tt<2?' · next tier at '+(tt===0?3:8)+' prestiges':' · apex');
+  setHTMLIfChanged($('throneLine'),'Ascension tier: <b class="gold">'+THRONES[tt]+'</b> (+'+(15*tt)+
+    '% all production)'+(tt<2?' · next tier at '+(tt===0?3:8)+' prestiges':' · apex'));
   $('prestigeBtn').disabled=r.pp<1;
   $('prestigeBtn').textContent=r.pp<1?('Hold 10 territories to claim ('+r.n+'/10)')
     :('Claim the mandate — +'+fmt(r.pp)+' PP');}
@@ -4118,9 +4330,9 @@ function updateTop(){const rt=rates(),AP=armyPower();
   const at=$('autoTgl'),has=!!S.tech.staff;at.disabled=!has;
   if(!has)$('autoState').textContent='locked';
   else{at.checked=S.auto;$('autoState').textContent=S.auto?'ON':'off';
-    $('autoInfo').innerHTML=S.auto
+    setHTMLIfChanged($('autoInfo'),S.auto
       ?('Besieging <b>'+(S.target&&!S.conq[S.target]?BY[S.target].flag+' '+BY[S.target].name:'the weakest foe')+'</b>; the next target is chosen automatically.')
-      :'Sieges continue on their own; this picks the next target when one falls. Click the map or a nation&#39;s name to aim.';}
+      :'Sieges continue on their own; this picks the next target when one falls. Click the map or a nation&#39;s name to aim.');}
   const rc=recruitCostG();
   $('recruitCost').textContent=fmt(rc.g)+' 🪙 + '+fmt(rc.m)+' 🪖';
   $('recruitBtn').disabled=S.gold<rc.g||S.mp<rc.m;
@@ -4182,10 +4394,13 @@ const HINTS=[
  {t:'At 10+ nations, the <b>Prestige</b> tab opens the Eternal Throne — reset for permanent power.',ok:()=>conqCount()>=10}];
 function updateHint(){const bar=$('hintBar');
   if(META.tut||!S){bar.classList.add('hidden');return;}
+  const before=S.hint;
   while(S.hint<HINTS.length&&HINTS[S.hint].ok())S.hint++;
-  if(S.hint>=HINTS.length){META.tut=true;bar.classList.add('hidden');
+  if(S.hint!==before)save();
+  if(S.hint>=HINTS.length){META.tut=true;bar.classList.add('hidden');save();
     toast('📯 Briefing complete','The rest is doctrine, daring, and the Dao. The Codex tab has the field manual.','grn');return;}
-  bar.classList.remove('hidden');$('hintText').innerHTML=HINTS[S.hint].t;}
+  bar.classList.remove('hidden');
+  if(lastHintRender!==S.hint){lastHintRender=S.hint;$('hintText').innerHTML=HINTS[S.hint].t;}}
 function buildCodex(){$('codex').innerHTML=
  '<p><b class="gold">Manpower 🪖</b> is your army. Army power = manpower × every multiplier (tech, equipment, realm, commander, arsenal, unified regions). Attacks never spend troops directly — <b class="red">casualties</b> do, scaling with how tough the target is relative to you. At <b class="grn">40× superiority</b> a nation falls bloodlessly (the ☠ estimate turns green at 0%).</p>'+
  '<p style="margin-top:8px"><b class="gold">Conquest is a siege.</b> One nation at a time: while targeted it takes 12% of your army power as damage per second (⏱ shows the ETA — more manpower means faster sieges), you bleed ☠%/s of manpower, and pressing Assault storms the walls for a burst of extra damage. Nations you abandon repair 2% of their defense per second. Bloc members get +22% defense per living ally — sign a <b>pact</b> to silence a bloc for 10 minutes, or defeat its members. Falling nations pay loot and recruits, then feed passive income forever (unless rebelling). Conquest raises <b>world tension</b>: it unlocks harsher conscription laws but invites border raids above 25%.</p>'+
@@ -4202,7 +4417,7 @@ function buildCodex(){$('codex').innerHTML=
 
 /* ================= navigation / boot ================= */
 const TABORDER=['conquest','build','generals','magic','cult','pokemon','prestige','stats','help'];
-let ACTIVE_TAB='conquest',pokemonRenderAt=0;
+let ACTIVE_TAB='conquest';
 function switchTab(name){if(name==='cult'&&(!S||!cultUnlocked()))return;
   if(name==='magic'&&(!S||!magicUnlocked()))return;
   if(name==='pokemon'&&(!S||!pokemonUnlocked()))return;
@@ -4215,7 +4430,7 @@ function switchTab(name){if(name==='cult'&&(!S||!cultUnlocked()))return;
   else if(name==='generals')renderGenerals();
   else if(name==='magic')renderSpells();
   else if(name==='cult'){renderRealm();updateRealmBtn();}
-  else if(name==='pokemon'){renderPokemon();pokemonRenderAt=Date.now();}
+  else if(name==='pokemon')renderPokemon();
   else if(name==='prestige'){updateShop();updatePrestige();}
   else if(name==='stats'){renderStats();void renderBoards();}
 }
@@ -4269,7 +4484,7 @@ $('registerPasswordConfirm').addEventListener('keydown',e=>{if(e.key==='Enter')v
 $('commanderSaveBtn').addEventListener('click',()=>{void updateCommanderNameFrom($('commanderNameIn').value);});
 $('saveNowBtn').addEventListener('click',async()=>{
   saveDirty=true;
-  const ok=await flushServerSave(true);
+  const ok=await flushServerSave(true,true);
   if(ok){
     GLOBAL_BOARDS.loadedAt=0;
     if(!$('tab-stats').classList.contains('hidden'))await renderBoards();
@@ -4366,10 +4581,11 @@ function enterGame(){$('startScreen').classList.add('hidden');$('authScreen').cl
   renderTechs();renderPacts();renderGenerals();renderRealm();renderShop();renderPokemon();
   renderAch();buildCodex();updateStatics();updateRegionTabs();applyFilter();
   switchTab('conquest');
+  targetIntentSeq=0;targetIntentCode=String(S.target||'');targetIntentPending=false;
   captureOptimisticCanonical();reconcileCombatVisual();
   updateTop();updateCards();updateBuildings();updateTechs();updatePacts();
   updateShop();updateRealmBtn();updatePrestige();renderStats();updateHint();}
-let last=Date.now(),uiAcc=0,slowAcc=0,saveAcc=0;
+let last=Date.now(),uiAcc=0,slowAcc=0;
 function renderSpeed(){const w=$('speedRow');if(!w||!S)return;w.innerHTML='';
   [[0,'⏸'],[1,'1×'],[2,'2×'],[4,'4×']].forEach(p=>{const b=document.createElement('button');
     b.dataset.speed=String(p[0]);
@@ -4406,7 +4622,6 @@ function applyPredictedLiveEconomy(dt){
 function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
   raw=clamp(raw,0,5);if(!S)return;updateMegaTimer();updateZTimer();
   const speed=S.speed===undefined?1:S.speed,dt=raw*speed;
-  saveAcc+=raw;if(saveAcc>=15){saveAcc=0;if(!actionBusy)save(false);}
   if(dt>0){
     applyPredictedLiveEconomy(raw);
     if(S.auto&&S.tech.staff&&(!S.target||S.conq[S.target])&&
@@ -4427,7 +4642,7 @@ function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
   }
 
   slowAcc+=raw;if(slowAcc>=1){slowAcc=0;
-    if(ACTIVE_TAB==='pokemon'&&Date.now()-pokemonRenderAt>=1000){renderPokemon();pokemonRenderAt=Date.now();}
+    if(ACTIVE_TAB==='pokemon')updatePokemonLive();
     if(ACTIVE_TAB==='stats')renderStats();
     updateLawButtons();updateSpeedButtons();updateHint();updateStatics();
   }
@@ -4494,13 +4709,13 @@ async function boot(){
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'&&ACCOUNT&&!saveConflict){
     saveDirty=true;
-    void flushServerSave(false);
+    void flushServerSave(false,true);
   }
 });
 
 // Retry any queued save when the browser reconnects.
 window.addEventListener('online',()=>{
-  if(ACCOUNT&&saveDirty)void flushServerSave(false);
+  if(ACCOUNT&&saveDirty)scheduleIdleSave(100);
 });
 
 // A browser cannot guarantee a final large request during shutdown. Warn only
