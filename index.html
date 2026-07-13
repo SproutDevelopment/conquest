@@ -800,9 +800,9 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <div class="sect panel">
         <div class="ptitle">Campaign ledger</div>
         <div class="statgrid" id="statGrid"></div>
-        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">top 100 · server-calculated persistent power; temporary boosts excluded</span></div>
+        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">rankings paused · authority phase 6 is active</span></div>
         <div class="statgrid leaderboard-scroll" id="lbPlayers" role="region" aria-label="Top 100 player leaderboard" tabindex="0"></div>
-        <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">all ranked countries · sum of each user's highest server-calculated power</span></div>
+        <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">country rankings resume after Pokémon systems become server-authoritative</span></div>
         <div class="statgrid leaderboard-scroll" id="lbNations" role="region" aria-label="All countries leaderboard" tabindex="0"></div>
       </div>
       <div class="sect panel">
@@ -834,7 +834,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authenticated server saves · server-calculated global leaderboards</footer>
+  <footer>IRON MANDATE · authority phase 6 · server generals, magic, cultivation and Prestige</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -856,6 +856,8 @@ const supabaseClient=window.supabase.createClient(SUPA.url,SUPA.anon,{
 });
 let ACCOUNT=null,SERVER_REVISION=0,saveDirty=false,saveBusy=false,saveTimer=null;
 let saveConflict=false,stateVersion=0,lastSavedVersion=0;
+let actionBusy=false,AUTHORITY_PHASE=0;
+let SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
 let S=null;
 let GLOBAL_BOARDS={players:[],nations:[],loadedAt:0};let GLOBAL_BOARD_PROMISE=null;
 function normalizeUsername(v){return String(v||'').trim().toLowerCase();}
@@ -873,7 +875,9 @@ function setAuthTab(tab){
 }
 function showAuth(){
   ACCOUNT=null;S=null;META=defaultMeta();SERVER_REVISION=0;
-  saveDirty=false;saveBusy=false;saveConflict=false;stateVersion=0;lastSavedVersion=0;
+  saveDirty=false;saveBusy=false;saveConflict=false;actionBusy=false;
+  AUTHORITY_PHASE=0;SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
+  stateVersion=0;lastSavedVersion=0;
   clearTimeout(saveTimer);saveTimer=null;
   $('game').classList.add('hidden');$('startScreen').classList.add('hidden');$('authScreen').classList.remove('hidden');
   setAuthTab('login');
@@ -1882,9 +1886,18 @@ function captureLegend(l){const p=legendPokemon(l.id);S.poke.owned[l.id]=Math.ma
   if((l.id==='reshiram'||l.id==='zekrom')&&hasLegend('reshiram')&&hasLegend('zekrom'))unlockEnding('truthideals','Truth and Ideals United');
   if(l.id==='kyurem')unlockEnding('originaldragon','Original Dragon Legacy');if((l.id==='solgaleo'||l.id==='lunala')&&hasLegend('solgaleo')&&hasLegend('lunala'))unlockEnding('lightduo','Light of Alola');if(l.id==='necrozma')unlockEnding('ultralight','Ultra Light Restored');
   sfx('realm');toast('🌟 LEGENDARY BOND FORGED',p.n+' joins your roster. '+l.buff,'grn');}
-function attemptLegend(id){const l=legendDef(id);if(!l||hasLegend(id)||!legendUnlocked(l))return;const phase=legendPhase(id),c=legendConditions(l,phase);if(!c.ok){toast('Sanctum conditions unmet',c.missing.join(' · '),'bad');return;}
-  S.poke.shards-=c.sc;S.poke.balls-=c.bc;S.poke.legendProgress[id]=phase+1;sfx('realm');
-  if(phase+1>=3)captureLegend(l);else toast('✨ SANCTUM PHASE '+(phase+1)+'/3',l.ph[phase]+' completed. The legendary resonance grows.','cyan');renderPokemon();}
+
+async function attemptLegend(id){
+  const result=await runServerAction('poke-legend',{id},true);
+  if(result&&result.result){
+    const l=legendDef(id),r=result.result;
+    sfx('realm');
+    toast(r.captured?'🌟 LEGENDARY BOND FORGED':'✨ SANCTUM PHASE '+r.phase+'/3',
+      r.captured?((legendPokemon(id)||{n:id}).n+' joined the roster.'):(l&&l.ph?r.phase&&l.ph[r.phase-1]:'Phase complete'),
+      r.captured?'grn':'cyan');
+    renderPokemon();
+  }
+}
 function renderLegends(){if(!$('legendGrid'))return;$('legendCount').textContent=LEGEND_CHALLENGES.filter(l=>hasLegend(l.id)).length;$('legendPhases').textContent=legendTotalPhases();$('legendBuffCount').textContent=LEGEND_CHALLENGES.filter(l=>hasLegend(l.id)).length;$('legendGrid').innerHTML='';
   for(const l of LEGEND_CHALLENGES){const p=legendPokemon(l.id),owned=hasLegend(l.id),un=legendUnlocked(l),phase=owned?3:legendPhase(l.id),c=!owned&&un?legendConditions(l,phase):null,d=document.createElement('div');d.className='legendcard '+(owned?'owned ':un?'':'locked');
     const phaseName=owned?'Bond complete':un?l.ph[phase]:'Sanctum undiscovered';const costs=c?((c.sc?'Offer '+c.sc+' 💠':'')+(c.bc?' + '+c.bc+' 🔴':'')):'';
@@ -1913,15 +1926,33 @@ function totalRivalWins(){return Object.values(S.poke.rivalWins||{}).reduce((a,b
 function addZygardeCells(n,source){const before=S.poke.zygardeCells||0;S.poke.zygardeCells=Math.min(100,before+Math.max(0,Math.floor(n)));if(S.poke.zygardeCells>before)toast('🧩 ZYGARDE CELLS','+'+(S.poke.zygardeCells-before)+' cells from '+source+' · '+S.poke.zygardeCells+'/100','cyan');}
 function rivalReq(r){return Math.floor(r.base*Math.pow(1.16,rivalWins(r.id))*(1+S.poke.worldRank*.06));}
 function rivalMasteryReq(r){return Math.floor(r.mastery*(1+rivalWins(r.id)*.12));}
-function fightRival(id){const r=RIVAL_TEAMS.find(x=>x.id===id);if(!r)return;const req=rivalReq(r),mr=rivalMasteryReq(r);if(trainerRating()<req||pokemonMastery()<mr)return;
- S.poke.rivalWins[id]=rivalWins(id)+1;S.poke.rivalStreak=(S.poke.rivalStreak||0)+1;const mult=1+(S.poke.rivalStreak||0)*.025;const formBonus=S.poke.specialForms.armoredMewtwo?1.2:1;const reward=Math.floor(r.reward*mult*formBonus);S.poke.battlePoints+=reward;S.poke.shards+=Math.ceil(r.reward*.8);addZygardeCells(r.cells+Math.floor(rivalWins(id)/10),'rival victory');sfx('realm');toast(r.ico+' RIVAL TEAM DEFEATED','+'+reward+' Battle Points · streak '+S.poke.rivalStreak,'grn');renderRivals();renderWorldCircuit();renderPokemon();}
+
+async function fightRival(id){
+  const result=await runServerAction('poke-rival',{id},true);
+  if(result&&result.result){
+    const r=RIVAL_TEAMS.find(x=>x.id===id),x=result.result;
+    sfx('realm');
+    toast((r?r.ico:'⚔️')+' RIVAL TEAM DEFEATED',
+      '+'+fmt(Number(x.reward)||0)+' Battle Points · '+fmt(Number(x.cells)||0)+' Zygarde Cells','grn');
+    renderPokemon();
+  }
+}
 function specialUnlocked(x){return hasLegend(x.base)&&rivalWins(x.rival)>=x.wins;}
-function challengeSpecial(id){const x=SPECIAL_FORMS.find(v=>v.id===id);if(!x||S.poke.specialForms[id]||!specialUnlocked(x)||trainerRating()<x.req||S.poke.battlePoints<x.costBP||S.poke.shards<x.costShards)return;S.poke.battlePoints-=x.costBP;S.poke.shards-=x.costShards;S.poke.specialForms[id]=1;sfx('realm');toast('✨ SPECIAL FORM UNLOCKED',x.n+' · '+x.buff,'grn');renderRivals();renderPokemon();}
+
+async function challengeSpecial(id){
+  const result=await runServerAction('poke-special',{id},true);
+  if(result){
+    const x=SPECIAL_FORMS.find(v=>v.id===id);
+    sfx('realm');toast('✨ SPECIAL FORM UNLOCKED',x?x.n:id,'grn');renderPokemon();
+  }
+}
 function zygardeFormName(){const c=S.poke.zygardeCells||0;return c>=100?'Zygarde Complete Forme':c>=50?'Zygarde 50% Forme':c>=10?'Zygarde 10% Forme':'Zygarde Core';}
 function megaZygardeActive(){return !!(META.megaZygardeUnlocked&&S&&S.poke&&S.poke.owned&&S.poke.owned.zygarde);}
 function zygardeChallengeReady(){return (S.poke.zygardeCells||0)>=100&&hasLegend('zygarde')&&totalRivalWins()>=80&&S.poke.worldRank>=10&&SPECIAL_FORMS.every(x=>S.poke.specialForms[x.id]);}
 async function beginMegaZygardeGauntlet(){if(!zygardeChallengeReady()||ppCalc().pp<1)return;await claimPrestige('gauntlet');}
-function completeMegaZygardeGauntlet(){if(!S.ch.megaZygarde||S.chFail.megaZygarde||S.chFail.nocas)return;META.megaZygardeUnlocked=1;S.poke.owned.zygarde=Math.max(1,S.poke.owned.zygarde||0);S.poke.zygardeCells=100;unlockEnding('megazygarde','Absolute Order');toast('💚 MEGA ZYGARDE UNLOCKED','Absolute Order now dominates every future campaign.','grn');}
+function completeMegaZygardeGauntlet(){
+  // Authority Phase 5: Supabase grants this only after a verified full-world clear.
+}
 function renderRivals(){if(!$('rivalGrid')||!S||!S.poke)return;$('rivalTotal').textContent=totalRivalWins();$('rivalStreak').textContent=S.poke.rivalStreak||0;$('zygardeCells').textContent=S.poke.zygardeCells||0;$('zygardeCellBar').style.width=(S.poke.zygardeCells||0)+'%';$('zygardeCellText').textContent=(S.poke.zygardeCells||0)>=100?'All 100 Cells assembled. Complete the rival and prestige conditions to challenge Absolute Order.':'Cells form Zygarde at 10%, 50%, and Complete Forme milestones.';$('rivalGrid').innerHTML='';
  for(const r of RIVAL_TEAMS){const req=rivalReq(r),mr=rivalMasteryReq(r),d=document.createElement('div');d.className='rivalcard';d.innerHTML='<div class="hd"><span class="ico">'+r.ico+'</span><span>'+r.n+'</span></div><div class="ds">'+r.d+'</div><div class="req">Wins '+rivalWins(r.id)+' · Rating '+fmt(trainerRating())+' / '+fmt(req)+' · Mastery '+fmt(pokemonMastery())+' / '+fmt(mr)+'</div><button '+(trainerRating()<req||pokemonMastery()<mr?'disabled':'')+'>CHALLENGE RIVAL TEAM</button>';d.querySelector('button').onclick=()=>fightRival(r.id);$('rivalGrid').appendChild(d);}
  $('specialGrid').innerHTML='';for(const x of SPECIAL_FORMS){const owned=!!S.poke.specialForms[x.id],un=specialUnlocked(x),d=document.createElement('div');d.className='specialcard '+x.cls;d.innerHTML='<div class="hd"><span>'+x.n+'</span></div><div class="ds">'+x.buff+'</div><div class="req">'+(owned?'Unlocked permanently this campaign':!un?'Requires '+x.wins+' '+RIVAL_TEAMS.find(r=>r.id===x.rival).n+' wins and captured '+legendPokemon(x.base).n:'Rating '+fmt(trainerRating())+' / '+fmt(x.req)+' · '+fmt(x.costBP)+' BP · '+fmt(x.costShards)+' shards')+'</div><button '+(owned||!un||trainerRating()<x.req||S.poke.battlePoints<x.costBP||S.poke.shards<x.costShards?'disabled':'')+'>'+(owned?'FORM UNLOCKED':'BEGIN SPECIAL CHALLENGE')+'</button>';d.querySelector('button').onclick=()=>challengeSpecial(x.id);$('specialGrid').appendChild(d);}
@@ -1958,11 +1989,22 @@ function inheritedRating(p){const t=traitFor(p.id);return t?t.rating||0:0;}
 function championshipReq(c){const rank=S.poke.worldRank||0,i=CHAMPIONSHIPS.indexOf(c);return Math.floor(c.base*Math.pow(1.18,rank)*Math.pow(1.22,i));}
 function championshipMastery(c){const rank=S.poke.worldRank||0,i=CHAMPIONSHIPS.indexOf(c);return Math.floor(c.mastery*(1+rank*.16)*(1+i*.18));}
 function championshipUnlocked(c){const i=CHAMPIONSHIPS.indexOf(c);return badgeCount()>=72&&(!i||(S.poke.champWins&&S.poke.champWins[CHAMPIONSHIPS[i-1].id]>0));}
-function fightChampionship(id){const c=CHAMPIONSHIPS.find(x=>x.id===id);if(!c||!championshipUnlocked(c))return;const r=trainerRating(),m=pokemonMastery(),rr=championshipReq(c),mr=championshipMastery(c);if(r<rr||m<mr)return;
-  S.poke.champWins[id]=(S.poke.champWins[id]||0)+1;S.poke.champStreak=(S.poke.champStreak||0)+1;const rankBonus=1+(S.poke.worldRank||0)*.12;const reward=Math.floor(c.reward*rankBonus*(1+S.poke.champStreak*.03));S.poke.battlePoints+=reward;addZygardeCells(id==='world'?3:1,'World Championship');
-  if(id==='world'){S.poke.worldRank++;toast('🌐 WORLD RANK '+S.poke.worldRank,'Championship cleared · +'+reward+' Battle Points. The next circuit is stronger.','grn');}
-  else toast(c.ico+' '+c.n+' CLEARED','+'+reward+' Battle Points · streak '+S.poke.champStreak,'grn');sfx('realm');renderWorldCircuit();renderPokemon();}
-function buyTraining(id){const t=TRAINING.find(x=>x.id===id);if(!t)return;const lv=trainingLevel(id),cost=trainingCost(t);if(lv>=t.max||S.poke.battlePoints<cost)return;S.poke.battlePoints-=cost;S.poke.training[id]=lv+1;sfx('buy');renderWorldCircuit();renderPokemon();}
+
+async function fightChampionship(id){
+  const result=await runServerAction('poke-championship',{id},true);
+  if(result&&result.result){
+    const c=CHAMPIONSHIPS.find(x=>x.id===id),r=result.result;
+    sfx('realm');
+    toast(id==='world'?'🌐 WORLD RANK '+r.worldRank:(c?c.ico+' '+c.n:'CHAMPIONSHIP CLEARED'),
+      '+'+fmt(Number(r.reward)||0)+' Battle Points','grn');
+    renderPokemon();
+  }
+}
+
+async function buyTraining(id){
+  const result=await runServerAction('poke-training',{id},true);
+  if(result){sfx('buy');renderPokemon();}
+}
 function renderWorldCircuit(){if(!$('champGrid')||!S||!S.poke)return;$('battlePoints').textContent=fmt(S.poke.battlePoints||0);$('worldRank').textContent=S.poke.worldRank||0;$('champStreak').textContent=S.poke.champStreak||0;$('champGrid').innerHTML='';
   for(const c of CHAMPIONSHIPS){const un=championshipUnlocked(c),r=trainerRating(),m=pokemonMastery(),rr=championshipReq(c),mr=championshipMastery(c),d=document.createElement('div');d.className='champcard '+(un?'':'locked');d.innerHTML='<div class="hd"><span class="ico">'+c.ico+'</span><span>'+c.n+'</span><span class="rank">W '+((S.poke.champWins[c.id]||0))+'</span></div><div class="ds">'+c.d+'</div><div class="req">Rating '+fmt(r)+' / '+fmt(rr)+' · Mastery '+fmt(m)+' / '+fmt(mr)+'</div><button>'+(un&&r>=rr&&m>=mr?'ENTER CHAMPIONSHIP':un?'NOT READY':'LOCKED')+'</button>';const b=d.querySelector('button');b.disabled=!un||r<rr||m<mr;b.onclick=()=>fightChampionship(c.id);$('champGrid').appendChild(d);}
   $('trainingGrid').innerHTML='';for(const t of TRAINING){const lv=trainingLevel(t.id),cost=trainingCost(t),d=document.createElement('div');d.className='traincard';d.innerHTML='<div class="nm">'+t.n+'<span class="lv">'+lv+' / '+t.max+'</span></div><div class="ds">'+t.ds+'</div><button>'+(lv>=t.max?'MAXIMUM':'UPGRADE — '+fmt(cost)+' 🏅')+'</button>';const b=d.querySelector('button');b.disabled=lv>=t.max||S.poke.battlePoints<cost;b.onclick=()=>buyTraining(t.id);$('trainingGrid').appendChild(d);}}
@@ -1980,9 +2022,27 @@ function traitFor(id){return S.poke.traits&&S.poke.traits[id]?INHERITED_TRAITS[S
 function traitScore(id){const order=['powerhouse','prodigy','lucky','resilient','gifted','champion'];return order.indexOf(id);}
 function randomTrait(){const r=Math.random();if(r<.02)return'champion';if(r<.08)return'gifted';return['powerhouse','prodigy','lucky','resilient'][Math.floor(Math.random()*4)];}
 function breedingCost(){return Math.floor(80*Math.pow(1.10,S.poke.eggsHatched||0));}
-function breedPokemon(){if(!nurseryUnlocked()||S.poke.eggs.length>=eggLimit())return;const a=$('breedParentA').value,b=$('breedParentB').value,pa=POKEMON.find(x=>x.id===a),pb=POKEMON.find(x=>x.id===b),cost=breedingCost();if(!pa||!pb||a===b||pa.legend||pb.legend||S.poke.battlePoints<cost)return;
-  S.poke.battlePoints-=cost;const species=Math.random()<.5?a:b,trait=Math.random()<.68?(S.poke.traits[species]||S.poke.traits[a]||S.poke.traits[b]||randomTrait()):randomTrait();S.poke.eggs.push({id:'e'+Date.now()+Math.floor(Math.random()*9999),species,trait,shiny:Math.random()<shinyChance(),hatchAt:Date.now()+eggIncubation()});sfx('buy');toast('🥚 EGG RECEIVED',(POKEMON.find(x=>x.id===species)||{n:'Pokémon'}).n+' egg placed in an incubator.','cyan');renderNursery();renderWorldCircuit();}
-function hatchEgg(id){const i=S.poke.eggs.findIndex(e=>e.id===id);if(i<0)return;const e=S.poke.eggs[i];if(e.hatchAt>Date.now())return;const p=POKEMON.find(x=>x.id===e.species);if(!p)return;S.poke.eggs.splice(i,1);S.poke.eggsHatched++;S.poke.owned[p.id]=(S.poke.owned[p.id]||0)+2;const current=S.poke.traits[p.id];if(!current||traitScore(e.trait)>traitScore(current))S.poke.traits[p.id]=e.trait;if(e.shiny)S.poke.shiny[p.id]=1;if(!S.poke.team.includes(p.id)&&S.poke.team.length<6)S.poke.team.push(p.id);sfx('realm');toast(e.shiny?'✨ SHINY HATCHED':'🥚 EGG HATCHED',p.n+' hatched with '+INHERITED_TRAITS[e.trait].n+' · Bond +2.','grn');renderNursery();renderPokemon();}
+
+async function breedPokemon(){
+  const first=$('breedParentA').value,second=$('breedParentB').value;
+  const result=await runServerAction('poke-breed',{first,second},true);
+  if(result&&result.result){
+    const p=POKEMON.find(x=>x.id===result.result.egg.species);
+    sfx('buy');toast('🥚 EGG RECEIVED',(p?p.n:'Pokémon')+' egg entered a server-timed incubator.','cyan');
+    renderPokemon();
+  }
+}
+
+async function hatchEgg(id){
+  const result=await runServerAction('poke-hatch',{id},true);
+  if(result&&result.result){
+    const r=result.result,p=POKEMON.find(x=>x.id===r.species);
+    sfx('realm');
+    toast(r.shiny?'✨ SHINY HATCHED':'🥚 EGG HATCHED',
+      (p?p.n:r.species)+' · Bond '+fmt(Number(r.bond)||0),'grn');
+    renderPokemon();
+  }
+}
 function renderNursery(){if(!$('eggGrid')||!S||!S.poke)return;const unlocked=nurseryUnlocked(),owned=POKEMON.filter(p=>!p.legend&&S.poke.owned[p.id]);$('eggCount').textContent=S.poke.eggs.length;$('shinyCount').textContent=Object.keys(S.poke.shiny||{}).length;$('traitCount').textContent=Object.keys(S.poke.traits||{}).length;
   const opts='<option value="">Choose partner</option>'+owned.map(p=>'<option value="'+p.id+'">'+pokeForm(p).n+' · Bond '+S.poke.owned[p.id]+'</option>').join('');$('breedParentA').innerHTML=opts;$('breedParentB').innerHTML=opts;$('breedBtn').disabled=!unlocked||owned.length<2||S.poke.eggs.length>=eggLimit()||S.poke.battlePoints<breedingCost();$('breedBtn').textContent=!unlocked?'UNLOCKS AFTER 16 BADGES':'CREATE EGG — '+fmt(breedingCost())+' 🏅';$('breedInfo').textContent='Incubation '+Math.ceil(eggIncubation()/60000)+' min · shiny chance '+(shinyChance()*100).toFixed(2)+'% · eggs '+S.poke.eggs.length+'/'+eggLimit();
   $('eggGrid').innerHTML='';for(const e of S.poke.eggs){const p=POKEMON.find(x=>x.id===e.species),left=Math.max(0,e.hatchAt-Date.now()),ready=!left,d=document.createElement('div');d.className='eggcard'+(ready?' ready':'');d.innerHTML='<span class="eggico">🥚</span><div class="enm">'+(p?p.n:'Unknown')+' Egg</div><div class="small">Inherited potential hidden</div><div class="etime">'+(ready?'READY TO HATCH':Math.ceil(left/1000)+'s remaining')+'</div><button>'+(ready?'HATCH EGG':'INCUBATING')+'</button>';const b=d.querySelector('button');b.disabled=!ready;b.onclick=()=>hatchEgg(e.id);$('eggGrid').appendChild(d);}if(!S.poke.eggs.length)$('eggGrid').innerHTML='<p class="note">No eggs are incubating. Pair two captured partners to begin.</p>';}
@@ -1999,17 +2059,46 @@ function teraCooldownRemaining(){return Math.max(0,((S&&S.poke&&S.poke.teraCoold
 function teraActiveId(){const a=S&&S.poke&&S.poke.activeTera;return a&&a.until>Date.now()?a.id:null;}
 function teraTypeOf(p){return (S.poke.teraTypes&&S.poke.teraTypes[p.id])||p.type;}
 function canTerastalize(p){return !!(p&&S.poke.teraOrb&&S.poke.teraShards>0&&S.poke.team.includes(p.id)&&!teraActiveId()&&!megaActiveId()&&!dmaxActiveId()&&!zActive()&&teraCooldownRemaining()<=0);}
-function activateTera(id){if(S.ch&&S.ch.megaZygarde){S.chFail.megaZygarde=1;toast('Order Gauntlet failed','Terastalization is forbidden in this challenge.','bad');return;}const p=POKEMON.find(x=>x.id===id);if(!canTerastalize(p))return;S.poke.teraShards--;S.poke.activeTera={id,until:Date.now()+(hasLegend('terapagos')?65000:TERA_DURATION)};sfx('realm');toast('💠 TERASTALIZATION',p.n+' crystallized into '+PTYPES[teraTypeOf(p)]+' type. Other battle transformations are locked.','cyan');renderPokemon();}
-function updateTeraTimer(){if(!S||!S.poke)return;const a=S.poke.activeTera;if(a&&a.until<=Date.now()){S.poke.activeTera=null;S.poke.teraCooldownUntil=Date.now()+TERA_COOLDOWN;toast('💠 TERASTALIZATION ENDED','The crystal crown faded.','cyan');renderPokemon();return;}const el=$('teraStatus');if(!el)return;const id=teraActiveId();if(id){const p=POKEMON.find(x=>x.id===id);el.textContent='Tera '+(p?p.n:id)+' '+Math.ceil(teraRemaining()/1000)+'s';}else if(!S.poke.teraOrb)el.textContent='Locked';else if(teraCooldownRemaining())el.textContent='Cooldown '+Math.ceil(teraCooldownRemaining()/1000)+'s';else el.textContent='Ready';}
 
-const DMAX_DURATION=30000,DMAX_COOLDOWN=150000;
+async function activateTera(id){
+  const result=await runServerAction('poke-activate-tera',{id},true);
+  if(result&&result.result&&result.result.blocked){
+    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');renderPokemon();return;
+  }
+  if(result){sfx('realm');toast('💠 TERASTALIZATION','The server started the crystal timer.','cyan');renderPokemon();}
+}
+
+function updateTeraTimer(){
+  if(!S||!S.poke)return;
+  const el=$('teraStatus');if(!el)return;
+  const id=teraActiveId();
+  if(id){const p=POKEMON.find(x=>x.id===id);el.textContent='Tera '+(p?p.n:id)+' '+Math.ceil(teraRemaining()/1000)+'s';}
+  else if(!S.poke.teraOrb)el.textContent='Locked';
+  else if(teraCooldownRemaining())el.textContent='Cooldown '+Math.ceil(teraCooldownRemaining()/1000)+'s';
+  else el.textContent='Ready';
+}
 function dmaxActiveId(){const a=S&&S.poke&&S.poke.activeDmax;return a&&a.until>Date.now()?a.id:null;}
 function dmaxRemaining(){const a=S&&S.poke&&S.poke.activeDmax;return a?Math.max(0,a.until-Date.now()):0;}
 function dmaxCooldownRemaining(){return Math.max(0,((S&&S.poke&&S.poke.dmaxCooldownUntil)||0)-Date.now());}
 function canDynamax(p){return !!(p&&S.poke.dmaxBand&&S.poke.team.includes(p.id)&&S.poke.dmaxEnergy>0&&!dmaxActiveId()&&!megaActiveId()&&dmaxCooldownRemaining()<=0);}
-function activateDmax(id){if(S.ch&&S.ch.megaZygarde){S.chFail.megaZygarde=1;toast('Order Gauntlet failed','Dynamax is forbidden in this challenge.','bad');return;}const p=POKEMON.find(x=>x.id===id);if(!canDynamax(p))return;if(megaActiveId()||teraActiveId()){toast('Battle mechanic locked','End Mega Evolution or Terastalization before Dynamaxing.','bad');return;}S.poke.dmaxEnergy--;S.poke.activeDmax={id,until:Date.now()+DMAX_DURATION+(hasLegend('eternatus')?15000:0)};sfx('realm');toast(GMAX_FORMS[id]?'🌌 GIGANTAMAX':'🏟️ DYNAMAX',(GMAX_FORMS[id]?GMAX_FORMS[id].n:p.n)+' grew to colossal size. Mega Evolution is locked until it ends.','cyan');renderPokemon();}
-function updateDmaxTimer(){if(!S||!S.poke)return;const a=S.poke.activeDmax;if(a&&a.until<=Date.now()){S.poke.activeDmax=null;S.poke.dmaxCooldownUntil=Date.now()+DMAX_COOLDOWN;toast('🏟️ DYNAMAX ENDED','The Pokémon returned to normal.','cyan');renderPokemon();return;}const el=$('dmaxStatus');if(!el)return;const id=dmaxActiveId();if(id){const p=POKEMON.find(x=>x.id===id);el.textContent=(GMAX_FORMS[id]?'G-Max ':'D-Max ')+(p?p.n:id)+' '+Math.ceil(dmaxRemaining()/1000)+'s';}else if(!S.poke.dmaxBand)el.textContent='Locked';else if(dmaxCooldownRemaining())el.textContent='Cooldown '+Math.ceil(dmaxCooldownRemaining()/1000)+'s';else el.textContent='Ready';}
-const MEGA_DURATION=90000,MEGA_COOLDOWN=180000;
+
+async function activateDmax(id){
+  const result=await runServerAction('poke-activate-dmax',{id},true);
+  if(result&&result.result&&result.result.blocked){
+    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');renderPokemon();return;
+  }
+  if(result){sfx('realm');toast(GMAX_FORMS[id]?'🌌 GIGANTAMAX':'🏟️ DYNAMAX','The server started the transformation timer.','cyan');renderPokemon();}
+}
+
+function updateDmaxTimer(){
+  if(!S||!S.poke)return;
+  const el=$('dmaxStatus');if(!el)return;
+  const id=dmaxActiveId();
+  if(id){const p=POKEMON.find(x=>x.id===id);el.textContent=(GMAX_FORMS[id]?'G-Max ':'D-Max ')+(p?p.n:id)+' '+Math.ceil(dmaxRemaining()/1000)+'s';}
+  else if(!S.poke.dmaxBand)el.textContent='Locked';
+  else if(dmaxCooldownRemaining())el.textContent='Cooldown '+Math.ceil(dmaxCooldownRemaining()/1000)+'s';
+  else el.textContent='Ready';
+}
 function megaActiveId(){const a=S&&S.poke&&S.poke.activeMega;return a&&a.until>Date.now()?a.id:null;}
 function megaRemaining(){const a=S&&S.poke&&S.poke.activeMega;return a?Math.max(0,a.until-Date.now()):0;}
 function megaCooldownRemaining(){return Math.max(0,((S&&S.poke&&S.poke.megaCooldownUntil)||0)-Date.now());}
@@ -2022,18 +2111,48 @@ function megaCount(){return Object.keys((S.poke&&S.poke.mega)||{}).filter(id=>ME
 function megaFormReady(p){const ch=evoChain(p);return !!(p&&MEGA_FORMS[p.id]&&(!ch.length||evoStage(p.id)>=ch.length));}
 function canUnlockMega(p){return !!(megaFormReady(p)&&(S.poke.owned[p.id]||0)>=5&&!S.poke.mega[p.id]&&S.poke.megaStones>0);}
 function canActivateMega(p){return !!(megaFormReady(p)&&S.poke.mega[p.id]&&S.poke.team.includes(p.id)&&!megaActiveId()&&!dmaxActiveId()&&megaCooldownRemaining()<=0);}
-function activateMega(id){if(S.ch&&S.ch.megaZygarde){S.chFail.megaZygarde=1;toast('Order Gauntlet failed','Mega Evolution is forbidden in this challenge.','bad');return;}const p=POKEMON.find(x=>x.id===id),m=MEGA_FORMS[id];if(dmaxActiveId()||teraActiveId()){toast('Battle mechanic locked','Dynamax, Gigantamax and Terastalization cannot overlap with Mega Evolution.','bad');return;}if(!canActivateMega(p)||!m)return;S.poke.activeMega={id,until:Date.now()+MEGA_DURATION};sfx('realm');toast('💎 MEGA EVOLUTION',m.n+' awakened for 90 seconds. Its portrait and battle form have changed.','cyan');renderPokemon();}
-function megaEvolve(id){const p=POKEMON.find(x=>x.id===id),m=MEGA_FORMS[id];if(!canUnlockMega(p)||!m)return;S.poke.megaStones--;S.poke.mega[id]=1;sfx('realm');toast('💎 MEGA STONE BONDED',m.n+' is now available as a timed battle transformation.','cyan');if(S.poke.team.includes(id)&&!megaActiveId()&&megaCooldownRemaining()<=0)activateMega(id);else renderPokemon();}
-function updateMegaTimer(){if(!S||!S.poke)return;const a=S.poke.activeMega;if(a&&a.until<=Date.now()){const p=POKEMON.find(x=>x.id===a.id);S.poke.activeMega=null;S.poke.megaCooldownUntil=Date.now()+MEGA_COOLDOWN;toast('💎 MEGA EVOLUTION ENDED',(p?p.n:'Your partner')+' returned to normal. Mega Evolution is cooling down for 180 seconds.','cyan');renderPokemon();return;}const el=$('megaStatus');if(!el)return;const id=megaActiveId();if(id){const p=POKEMON.find(x=>x.id===id);el.textContent=(p?p.n:id)+' '+Math.ceil(megaRemaining()/1000)+'s';}else if(megaCooldownRemaining()>0)el.textContent='Cooldown '+Math.ceil(megaCooldownRemaining()/1000)+'s';else el.textContent='Ready';}
 
-const Z_DURATION=20000,Z_COOLDOWN=90000;
+async function activateMega(id){
+  const result=await runServerAction('poke-activate-mega',{id},true);
+  if(result&&result.result&&result.result.blocked){
+    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');renderPokemon();return;
+  }
+  if(result){sfx('realm');toast('💎 MEGA EVOLUTION','The server started the transformation timer.','cyan');renderPokemon();}
+}
+
+function updateMegaTimer(){
+  if(!S||!S.poke)return;
+  const el=$('megaStatus');if(!el)return;
+  const id=megaActiveId();
+  if(id){const p=POKEMON.find(x=>x.id===id);el.textContent=(p?p.n:id)+' '+Math.ceil(megaRemaining()/1000)+'s';}
+  else if(megaCooldownRemaining()>0)el.textContent='Cooldown '+Math.ceil(megaCooldownRemaining()/1000)+'s';
+  else el.textContent='Ready';
+}
 function zRemaining(){return Math.max(0,((S&&S.poke&&S.poke.zActiveUntil)||0)-Date.now());}
 function zCooldownRemaining(){return Math.max(0,((S&&S.poke&&S.poke.zCooldownUntil)||0)-Date.now());}
 function zActive(){return zRemaining()>0;}
-function activateZMove(){if(S.ch&&S.ch.megaZygarde){S.chFail.megaZygarde=1;toast('Order Gauntlet failed','Z-Moves are forbidden in this challenge.','bad');return;}if(!S||!S.poke||S.poke.zCrystals<1||zActive()||zCooldownRemaining()>0||!S.poke.team.length||megaActiveId()||dmaxActiveId()||teraActiveId())return;S.poke.zCrystals--;S.poke.zActiveUntil=Date.now()+(hasLegend('necrozma')?30000:Z_DURATION);S.poke.zCooldownUntil=S.poke.zActiveUntil+Z_COOLDOWN;sfx('realm');toast('✨ Z-MOVE UNLEASHED','The active team channels island power for '+(hasLegend('necrozma')?30:20)+' seconds.','cyan');renderPokemon();}
+
+async function activateZMove(){
+  const result=await runServerAction('poke-activate-z',{},true);
+  if(result&&result.result&&result.result.blocked){
+    toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');renderPokemon();return;
+  }
+  if(result){sfx('realm');toast('✨ Z-MOVE UNLEASHED','The server started the Z-Move timer.','cyan');renderPokemon();}
+}
 function updateZTimer(){if(!S||!S.poke)return;const st=$('zStatus'),bt=$('zMoveBtn');if(!st||!bt)return;if(zActive())st.textContent='Active '+Math.ceil(zRemaining()/1000)+'s';else if(zCooldownRemaining())st.textContent='Cooldown '+Math.ceil(zCooldownRemaining()/1000)+'s';else st.textContent='Ready';bt.disabled=S.poke.zCrystals<1||zActive()||zCooldownRemaining()>0||!S.poke.team.length||!!megaActiveId()||!!dmaxActiveId()||!!teraActiveId();bt.textContent=zActive()?'Z-Move active':zCooldownRemaining()?'Z-Move cooling down':'Unleash Z-Move';}
 function raidStars(){return Math.min(5,1+Math.floor(pokemonRegionHeld('galar')/4));}
-function runMaxRaid(){if(!S.poke.dmaxBand||S.poke.raidCooldown>Date.now())return;const stars=raidStars(),need=35000*Math.pow(1.65,stars);if(trainerRating()<need){toast('Max Raid failed','Trainer Rating '+trainerRating()+' / '+Math.floor(need),'bad');S.poke.raidCooldown=Date.now()+30000;renderPokemon();return;}const mult=hasLegend('eternatus')?1.35:1;S.poke.dmaxEnergy+=Math.ceil(stars*2*mult);S.poke.shards+=Math.ceil(stars*35*mult);S.poke.raidWins++;addZygardeCells(Math.max(1,Math.floor(stars/2)),'Max Raid');S.poke.raidCooldown=Date.now()+60000;sfx('realm');toast('🏟️ MAX RAID WON','+'+Math.ceil(stars*2*mult)+' Dynamax Energy · +'+Math.ceil(stars*35*mult)+' Evolution Shards','grn');renderPokemon();}
+
+async function runMaxRaid(){
+  const result=await runServerAction('poke-raid',{},true);
+  if(result&&result.result){
+    const r=result.result;
+    if(r.won){
+      sfx('realm');toast('🏟️ MAX RAID WON',
+        '+'+fmt(Number(r.energy)||0)+' Dynamax Energy · +'+fmt(Number(r.shards)||0)+' Evolution Shards','grn');
+    }else toast('Max Raid failed','Trainer Rating '+fmt(Number(r.rating)||0)+' / '+fmt(Number(r.requirement)||0),'bad');
+    renderPokemon();
+  }
+}
 function renderRaids(){if(!$('raidGrid'))return;const stars=raidStars(),cd=Math.max(0,S.poke.raidCooldown-Date.now()),need=Math.floor(35000*Math.pow(1.65,stars));$('raidGrid').innerHTML='<div class="trial '+(S.poke.dmaxBand?'':'locked')+'"><div class="hd"><span class="boss">🌌</span><div>'+('★'.repeat(stars))+' Max Raid</div></div><div class="ds">A colossal Pokémon has appeared at a Wild Area power spot.</div><div class="req">Trainer Rating '+trainerRating()+' / '+need+' · Raid wins '+S.poke.raidWins+'</div><button '+(!S.poke.dmaxBand||cd?'disabled':'')+'>'+(S.poke.dmaxBand?(cd?'Next raid '+Math.ceil(cd/1000)+'s':'CHALLENGE MAX RAID'):'CLEAR DYNAMAX BAND TRIAL')+'</button></div>';const b=$('raidGrid').querySelector('button');if(b)b.onclick=runMaxRaid;}
 function pokeBaseBonus(){let b=pokeTeam().reduce((a,p)=>{const f=pokeForm(p),bond=S.poke.owned[p.id]||1,m=(hasLegend('reshiram')&&f.type==='fire'?1.2:1)*(hasLegend('zekrom')&&f.type==='electric'?1.2:1);return a+f.pow*(1+0.08*(bond-1))*m+pokeMoves(p).length*0.02;},0)+badgeCount()*0.05;if(hasLegend('kyurem'))b*=1.25;if(megaZygardeActive())b*=3;if(hasLegend('xerneas'))b+=pokeTeam().filter(p=>pokeForm(p).type==='fairy').reduce((a,p)=>a+pokeForm(p).pow*.25,0);if(hasLegend('yveltal'))b+=pokeTeam().filter(p=>pokeForm(p).type==='dark').reduce((a,p)=>a+pokeForm(p).pow*.25,0);if(hasLegend('tapukoko'))b+=pokeTeam().filter(p=>pokeForm(p).type==='electric').reduce((a,p)=>a+pokeForm(p).pow*.20,0);if(hasLegend('solgaleo'))b+=pokeTeam().filter(p=>pokeForm(p).type==='steel').reduce((a,p)=>a+pokeForm(p).pow*.25,0);if(hasLegend('lunala'))b+=pokeTeam().filter(p=>pokeForm(p).type==='ghost').reduce((a,p)=>a+pokeForm(p).pow*.25,0);if(zActive())b*=hasLegend('necrozma')?2.35:2;b*=1+trainingLevel('power')*.08;b+=pokeTeam().reduce((a,p)=>a+pokeForm(p).pow*(abilityPower(p)+inheritedPower(p)),0);return b;}
 function pokeTypeMult(target){if(!target||target.plane!=='pokemon')return 1;let best=1;
@@ -2041,29 +2160,53 @@ function pokeTypeMult(target){if(!target||target.plane!=='pokemon')return 1;let 
 function pokeMultFor(target){return target&&target.plane==='pokemon'?1+pokeBaseBonus()*pokeTypeMult(target):1;}
 function trainerRating(){let r=pokeTeam().reduce((a,p)=>{const f=pokeForm(p),bond=S.poke.owned[p.id]||1;return a+f.pow*100+bond*7+pokeMoves(p).length*6;},0)+badgeCount()*12+evolutionCount()*15;if(hasLegend('mewtwo'))r*=1.12;if(hasLegend('kyurem'))r*=1.15;if(hasLegend('tapulele'))r*=1.15;r*=1+trainingLevel('rating')*.06;r*=1+pokeTeam().reduce((a,p)=>a+inheritedRating(p),0);return Math.floor(r);}
 function ballCost(){const b=S.poke.bought||0;return Math.floor(50000*Math.pow(1.28,Math.min(10,b))*Math.pow(1.62,Math.max(0,b-10)));}
-function buyBall(){const c=ballCost();if(S.gold<c)return;S.gold-=c;S.poke.balls++;S.poke.bought++;sfx('buy');renderPokemon();}
-function catchChance(p){const region=Math.max(0,Math.floor((p.need||0)/18)),local=Math.min(8,BADGES.filter(b=>b[3]&&b[3].toLowerCase()===['kanto','johto','hoenn','sinnoh','unova','kalos','alola','galar','paldea'][region]&&S.badges[b[0]]).length);const base=.58+local*.035-region*.045+(hasLegend('mewtwo')?.08:0)+(hasLegend('xerneas')?.12:0)+(hasLegend('tapulele')?.06:0)+pokeTeam().reduce((a,p)=>a+((traitFor(p.id)||{}).capture||0),0)-Math.max(0,p.pow-.2)*.012;return clamp(base,.07,.88);}
-function catchPokemon(id){const p=POKEMON.find(x=>x.id===id);if(!p||p.legend||S.poke.balls<1||pokemonHeld()<p.need)return;
-  S.poke.balls--;S.poke.seen[id]=1;
-  if(Math.random()<catchChance(p)){const old=S.poke.owned[id]||0;S.poke.owned[id]=old+1+Math.floor(trainingLevel('bond')/10);S.poke.shards+=Math.ceil((old?2:1)*(hasLegend('xerneas')?1.25:1)*(1+trainingLevel('shards')*.08));if(!S.poke.team.includes(id)&&S.poke.team.length<6)S.poke.team.push(id);
-    toast('🔴 '+p.n+' captured',(old?'Bond rises to '+S.poke.owned[id]+' · +2':'It joins your roster · +1')+' Evolution Shard'+(old?'s':''), 'grn');sfx('realm');}
-  else toast('💨 It broke free',p.n+' escaped. More badges improve every capture.','bad');renderPokemon();}
-function togglePokemon(id){if(!S.poke.owned[id])return;const i=S.poke.team.indexOf(id);
-  if(i>=0)S.poke.team.splice(i,1);else if(S.poke.team.length<6)S.poke.team.push(id);else{toast('Team full','Deactivate a partner before adding another.','bad');return;}renderPokemon();}
-function evolvePokemon(id){const p=POKEMON.find(x=>x.id===id),next=p&&nextEvolution(p);if(!p||!next)return;const bond=S.poke.owned[id]||0,cost=evolutionCost(p,next);if(bond<(next.bond||3)||S.poke.shards<cost)return;S.poke.shards-=cost;S.poke.evo[id]=evoStage(id)+1;sfx('realm');toast('✨ EVOLUTION',p.n+' evolved into '+next.n+'! Evolution stage '+S.poke.evo[id]+'/'+evoChain(p).length+' completed.','cyan');renderPokemon();}
 
+async function buyBall(){
+  const result=await runServerAction('poke-buy-ball',{},true);
+  if(result){sfx('buy');renderPokemon();}
+}
+function catchChance(p){const region=Math.max(0,Math.floor((p.need||0)/18)),local=Math.min(8,BADGES.filter(b=>b[3]&&b[3].toLowerCase()===['kanto','johto','hoenn','sinnoh','unova','kalos','alola','galar','paldea'][region]&&S.badges[b[0]]).length);const base=.58+local*.035-region*.045+(hasLegend('mewtwo')?.08:0)+(hasLegend('xerneas')?.12:0)+(hasLegend('tapulele')?.06:0)+pokeTeam().reduce((a,p)=>a+((traitFor(p.id)||{}).capture||0),0)-Math.max(0,p.pow-.2)*.012;return clamp(base,.07,.88);}
+
+async function catchPokemon(id){
+  const result=await runServerAction('poke-catch',{id},true);
+  if(!result||!result.result)return;
+  const r=result.result,p=POKEMON.find(x=>x.id===id);
+  if(r.captured){
+    toast('🔴 '+(p?p.n:id)+' captured',
+      'Bond '+fmt(Number(r.bond)||0)+' · +'+fmt(Number(r.shardGain)||0)+' Evolution Shards','grn');
+    sfx('realm');
+  }else toast('💨 It broke free',(p?p.n:id)+' escaped the server-verified capture roll.','bad');
+  renderPokemon();
+}
+
+async function togglePokemon(id){
+  const result=await runServerAction('poke-toggle-team',{id},true);
+  if(result)renderPokemon();
+}
+
+async function evolvePokemon(id){
+  const result=await runServerAction('poke-evolve',{id},true);
+  if(result&&result.result){
+    sfx('realm');
+    toast('✨ EVOLUTION',(result.result.name||id)+' reached evolution stage '+result.result.stage+'.','cyan');
+    renderPokemon();
+  }
+}
 function pokemonMastery(){const bonds=Object.values(S.poke.owned||{}).reduce((a,v)=>a+Math.max(0,(Number(v)||0)-1),0);return bonds+evolutionCount()*6+badgeCount()*3+LEGEND_CHALLENGES.filter(l=>hasLegend(l.id)).length*12;}
 function trialMasteryReq(t){const i=Math.max(0,PTRIALS.indexOf(t));return i<5?0:Math.floor(Math.pow(i-4,1.32)*5);}
 function trialRatingReq(t){const i=Math.max(0,PTRIALS.indexOf(t));return Math.ceil(t.req*(i<5?1:1+Math.pow(i-4,1.08)*.018));}
 function trialUnlocked(t){if(t.need&&pokemonHeld()<t.need)return false;if(t.badges&&badgeCount()<t.badges)return false;if(t.code&&!S.conq[t.code])return false;if(t.prior&&!S.poke.trials[t.prior])return false;return true;}
-function fightTrial(id){const t=PTRIALS.find(x=>x.id===id);if(!t||S.poke.trials[id]||!trialUnlocked(t)||trainerRating()<trialRatingReq(t)||pokemonMastery()<trialMasteryReq(t))return;
-  S.poke.trials[id]=1;S.poke.shards+=Math.ceil(t.reward*(hasLegend('xerneas')?1.25:1));S.poke.balls+=3;S.poke.megaStones+=(t.mega||0);S.poke.zCrystals+=(t.z||0);S.poke.dmaxEnergy+=(t.dmax||0);if(id==='dmax_band')S.poke.dmaxBand=true;
-  if(id==='red')unlockEnding('silver','Summit of Silver');
-  if(id==='steven')unlockEnding('trileague','Tri-Region League Master');
-  if(id==='cynthia')unlockEnding('fourleague','Four-Region League Master');
-  if(id==='alder')unlockEnding('fiveleague','Five-Region League Master');
-  if(id==='diantha')unlockEnding('sixleague','Six-Region League Master');if(id==='alola_champion')unlockEnding('sevenleague','Seven-Region League Master');if(id==='leon')unlockEnding('eightleague','Eight-Region League Master');if(id==='nemona')unlockEnding('nineleague','Nine-Region League Master');if(id==='tera_orb')S.poke.teraOrb=true;
-  sfx('realm');const sanct=LEGEND_CHALLENGES.filter(l=>l.trial===id&&!hasLegend(l.id));toast(t.ico+' TRIAL CLEARED',t.n+' defeated · +'+t.reward+' Evolution Shards · +3 Poké Balls'+(t.mega?' · +'+t.mega+' Mega Stone'+(t.mega>1?'s':''):'')+(t.z?' · +'+t.z+' Z-Crystal'+(t.z>1?'s':''):'')+(t.dmax?' · +'+t.dmax+' Dynamax Energy':'')+(t.tera?' · +'+t.tera+' Tera Shards':'')+(sanct.length?' · '+sanct.map(l=>(legendPokemon(l.id)||{n:l.id}).n+' Sanctum unlocked').join(', '):''),'grn');renderPokemon();}
+
+async function fightTrial(id){
+  const result=await runServerAction('poke-trial',{id},true);
+  if(result&&result.result){
+    const t=PTRIALS.find(x=>x.id===id),r=result.result;
+    sfx('realm');
+    toast((t?t.ico:'🏆')+' TRIAL CLEARED',
+      '+'+fmt(Number(r.shardReward)||0)+' Evolution Shards · +3 Poké Balls','grn');
+    renderPokemon();
+  }
+}
 function renderPokemon(){if(!S||!$('rosterGrid'))return;
   $('pokemonTab').classList.toggle('hidden',!pokemonUnlocked());if(!pokemonUnlocked())return;
   $('ballCount').textContent=S.poke.balls;$('shardCount').textContent=S.poke.shards;$('megaCount').textContent=S.poke.megaStones;$('zCrystalCount').textContent=S.poke.zCrystals||0;$('dmaxEnergy').textContent=S.poke.dmaxEnergy||0;$('teraShards').textContent=S.poke.teraShards||0;updateMegaTimer();updateZTimer();updateDmaxTimer();updateTeraTimer();$('ballCost').textContent=fmt(ballCost());$('buyBallBtn').disabled=S.gold<ballCost();$('teamCount').textContent=S.poke.team.length;
@@ -2114,6 +2257,80 @@ function newRun(code,ch){
     poke:{balls:3,bought:0,owned:{},team:[],seen:{},shards:0,evo:{},megaStones:0,mega:{},activeMega:null,megaCooldownUntil:0,zCrystals:0,zActiveUntil:0,zCooldownUntil:0,dmaxBand:false,dmaxEnergy:0,activeDmax:null,dmaxCooldownUntil:0,raidCooldown:0,raidWins:0,teraOrb:false,teraShards:0,teraTypes:{},activeTera:null,teraCooldownUntil:0,battlePoints:0,worldRank:0,champStreak:0,champWins:{},training:{},eggs:[],eggsHatched:0,traits:{},shiny:{},rivalWins:{},rivalStreak:0,specialForms:{},zygardeCells:0,trials:{},legendProgress:{}},badges:{}};
   if(META.megaZygardePending){r.ch.megaZygarde=true;r.ch.nocas=true;r.ch.tiny=true;META.megaZygardePending=0;}r.conq[code]=1;
   return r;}
+
+const AUTH_GAME_KEYS=['mp','gold','equip','qi','mana','clicks','b','tech','disc','law','pacts','tr','conq','hp','pc','rc','rebels','target','realm','renown','won','badges','chFail','spells','shieldUntil','summonUntil','anchorUntil','warpath','gens','gid','cmd','summons','riskW','infT','infLvl','tension','auto','speed','playSec','ch','poke','serverAuth'];
+const AUTH_STAT_KEYS=['mpRec','goldE','trained','aged','won','cas','atk','dmg','gensLost'];
+const AUTH_META_KEYS=['pp','totPP','prestiges','best','bestCombo','shop','endings','bestGen','wins','fastWin','fastEarth','lifeWon','lifeCas','megaZygardeAttempts','megaZygardePending','megaZygardeUnlocked','ach'];
+function copyJson(v){return JSON.parse(JSON.stringify(v));}
+function applyAuthoritativeEnvelope(result){
+  if(result&&result.revision!==undefined)SERVER_REVISION=Number(result.revision);
+  if(result&&result.authorityPhase!==undefined)AUTHORITY_PHASE=Number(result.authorityPhase)||0;
+  if(result&&result.rates)SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates);
+  const serverState=result&&result.state;
+  if(!serverState||!serverState.S||!S)return;
+  const source=serverState.S;
+  for(const key of AUTH_GAME_KEYS)if(Object.prototype.hasOwnProperty.call(source,key))S[key]=copyJson(source[key]);
+  S.st=S.st||{};const stats=source.st||{};
+  for(const key of AUTH_STAT_KEYS)if(Object.prototype.hasOwnProperty.call(stats,key))S.st[key]=copyJson(stats[key]);
+  if(serverState.META){
+    const previousAch=Object.assign({},META.ach||{});
+    for(const key of AUTH_META_KEYS)if(Object.prototype.hasOwnProperty.call(serverState.META,key))META[key]=copyJson(serverState.META[key]);
+    const unlocked=Object.keys(META.ach||{}).filter(id=>META.ach[id]&&!previousAch[id]);
+    for(const id of unlocked){
+      const achievement=ACH.find(item=>item.id===id);
+      if(achievement){toast('🏅 Honor earned',achievement.n+' — '+achievement.d,'grn');sfx('realm');}
+    }
+    if(unlocked.length)renderAch();
+  }
+}
+async function runServerAction(type,payload={},quiet=false){
+  if(!ACCOUNT||!S||saveConflict)return null;
+  if(actionBusy){toast('Server action pending','Wait for the current order to finish.','bad');return null;}
+  clearTimeout(saveTimer);
+  if(saveDirty){
+    const saved=await flushServerSave(false);
+    if(!saved)return null;
+  }
+  actionBusy=true;
+  try{
+    const actionId=crypto.randomUUID();
+    const request={revision:SERVER_REVISION,actionId,type,payload};
+    let result;
+    for(let attempt=0;attempt<2;attempt++){
+      try{result=await gameApi('game-action',request);break;}
+      catch(error){
+        const transient=!error.status||error.status>=500;
+        if(!transient||attempt===1)throw error;
+        await new Promise(resolve=>setTimeout(resolve,350));
+      }
+    }
+    applyAuthoritativeEnvelope(result);
+    lastSavedVersion=stateVersion;
+    if(!quiet)toast('☁ Order confirmed','The server accepted the action.','grn');
+    renderBuildings();renderTechs();renderPacts();renderBranches();renderLaw();renderPlaneRow();
+    renderGenerals();renderRealm();renderSpells();renderShop();
+    updateTop();updateCards();updateMap();updateRegionTabs();updateStatics();
+    return result;
+  }catch(error){
+    if(error&&error.status===409){
+      saveConflict=true;
+      toast('☁ Action conflict','Reload to continue from the canonical server state.','bad');
+    }else toast('☁ Order rejected',error.message,'bad');
+    return null;
+  }finally{
+    actionBusy=false;
+    if(saveDirty)void flushServerSave(false);
+  }
+}
+
+function currentPreferences(){
+  return{
+    sound:META.sound!==false,
+    hc:!!META.hc,
+    bigFont:!!META.bigFont,
+    tut:!!META.tut
+  };
+}
 function makeSaveSnapshot(){
   const json=JSON.stringify({S,META},(key,value)=>{
     if(typeof value==='number'&&!Number.isFinite(value)){
@@ -2126,13 +2343,15 @@ function makeSaveSnapshot(){
 function save(markChanged=true){
   if(!ACCOUNT||saveConflict)return;
   if(markChanged)stateVersion++;
-  if(S)S.lastTs=Date.now();
   saveDirty=true;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{void flushServerSave(false);},500);
 }
 async function flushServerSave(showToast){
   if(!ACCOUNT||saveConflict)return false;
+  if(actionBusy){
+    while(actionBusy)await new Promise(resolve=>setTimeout(resolve,40));
+  }
   if(saveBusy){
     while(saveBusy)await new Promise(resolve=>setTimeout(resolve,40));
     if(saveDirty)return flushServerSave(showToast);
@@ -2144,12 +2363,11 @@ async function flushServerSave(showToast){
     while(saveDirty&&!saveConflict){
       saveDirty=false;
       const snapshotVersion=stateVersion;
-      const snapshot=makeSaveSnapshot();
       const result=await gameApi('save',{
         revision:SERVER_REVISION,
-        state:snapshot
+        preferences:currentPreferences()
       });
-      SERVER_REVISION=result.revision;
+      applyAuthoritativeEnvelope(result);
       lastSavedVersion=Math.max(lastSavedVersion,snapshotVersion);
       if(result.recordedPower!==undefined){
         GLOBAL_BOARDS.loadedAt=0;
@@ -2237,20 +2455,26 @@ function clampTrained(){const su=trainedSum();if(su<=S.mp)return;
 function branchLocked(b){if(b.req&&!S.tech[b.req])return'Needs '+TECHS.find(t=>t.id===b.req).n;
   if(b.reqConq&&conqCount()<b.reqConq)return'Needs '+b.reqConq+' territories';return null;}
 function trainCostB(b,n){return{g:b.g*Math.pow(n,0.8),e:b.e*Math.pow(n,0.6)};}
-function trainBranch(id,frac){const b=BRANCHES.find(x=>x.id===id);
-  if(!b||branchLocked(b))return;
-  const n=Math.floor(infantry()*frac);if(n<1)return;
-  const c=trainCostB(b,n);if(S.gold<c.g||S.equip<c.e)return;
-  S.gold-=c.g;S.equip-=c.e;S.tr[id]+=n;
-  S.st.trained=(S.st.trained||0)+n;sfx('buy');
-  toast(b.ico+' '+b.n,fmt(n)+' soldiers complete '+b.n+' training.','grn');}
-function disbandBranch(id){S.tr[id]=0;}
+async function trainBranch(id,frac){
+  const b=BRANCHES.find(x=>x.id===id);if(!b)return;
+  const result=await runServerAction('train-branch',{id,fraction:frac},true);
+  if(result&&result.result){
+    sfx('buy');
+    toast(b.ico+' '+b.n,fmt(Number(result.result.count)||0)+' soldiers complete '+b.n+' training.','grn');
+    renderBranches();
+  }
+}
+async function disbandBranch(id){
+  const result=await runServerAction('disband-branch',{id},true);
+  if(result)renderBranches();
+}
 function annThresh(){return 250/(1+1.5*Math.min(1,share('air')));}
 function armyPower(){const t=S.tr;
   const eff=infantry()+t.snip*1.5+t.navy*2+t.sf*2+t.air*2.5+t.armor*3;
   const target=S.target?BY[S.target]:null;return eff*powAll()*pokeMultFor(target);}
 function clickPow(){return (1+S.b.bar)*lawM().mp*(1+shopLvl('presence'))*(hasLegend('reshiram')?2:1)*(hasLegend('tapukoko')?1.3:1)*(S.ch.tiny?0.5:1);}
-function rates(){let mps=0,gps=0,eps=0,qps=0,mana=0;const now=Date.now();
+function rates(){if(AUTHORITY_PHASE>=2)return SERVER_RATES;
+  let mps=0,gps=0,eps=0,qps=0,mana=0;const now=Date.now();
   for(const c of COUNTRIES){if(!S.conq[c.code]||S.rebels[c.code]>now)continue;
     mps+=0.4*Math.pow(2.7,c.tier);gps+=1.2*Math.pow(2.7,c.tier);}
   for(const t of TERR){if(!S.conq[t.code])continue;
@@ -2278,137 +2502,105 @@ function expCas(c){const i=effInfo(c),AP=armyPower();
   return AP>0?i.eff/(i.eff+AP)*0.035*casMult():0.035*casMult();}
 
 /* ================= core actions ================= */
-function doClick(){const g=clickPow();S.mp+=g;S.clicks++;S.st.mpRec+=g;
-  floatAtEl($('seal'),'+'+fmt(g),'');sfx('click');}
+let mobilizePending=0,mobilizeTimer=null;
+function doClick(){
+  if(!S||AUTHORITY_PHASE<2)return;
+  mobilizePending=Math.min(20,mobilizePending+1);
+  floatAtEl($('seal'),'Mobilize','');sfx('click');
+  clearTimeout(mobilizeTimer);
+  mobilizeTimer=setTimeout(async()=>{
+    const count=mobilizePending;mobilizePending=0;
+    const result=await runServerAction('mobilize',{count},true);
+    if(result&&result.result)floatAtEl($('seal'),'+'+fmt(Number(result.result.gained)||0),'');
+  },120);
+}
 function buyNFor(b){if(S.buyN==='max'){const r=1.17,a=b.base*Math.pow(r,S.b[b.id]);
     return Math.max(0,Math.floor(Math.log(S.gold*(r-1)/a+1)/Math.log(r)));}
   return S.buyN;}
 function bCost(b,n){const r=1.17;return b.base*Math.pow(r,S.b[b.id])*(Math.pow(r,n)-1)/(r-1);}
-function buyBuilding(id){const b=BUILDINGS.find(x=>x.id===id);let n=buyNFor(b);
-  if(n<1)return;const c=bCost(b,n);if(S.gold<c)return;
-  S.gold-=c;S.b[id]+=n;sfx('buy');renderBuildings();save();}
+async function buyBuilding(id){
+  const result=await runServerAction('buy-building',{id,mode:S.buyN},true);
+  if(result){sfx('buy');renderBuildings();}
+}
 function techCost(t){let c=t.cost;if(S.disc&&S.disc.id===t.id)c*=1-S.disc.off;return Math.floor(c);}
 function techLocked(t){if(t.reqConq&&conqCount()<t.reqConq)return'Needs '+t.reqConq+' nations';
   if(t.needRealm&&S.realm<t.needRealm)return'Needs '+REALMS[t.needRealm].n;
   if(t.needPlane&&!planeUnlockedId(t.needPlane))
     return'Needs the '+PLANES[planeIdx(t.needPlane)].n;return null;}
-function buyTech(id){const t=TECHS.find(x=>x.id===id);if(!t||S.tech[id])return;
-  if(techLocked(t))return;const c=techCost(t);if(S.gold<c)return;
-  S.gold-=c;S.tech[id]=1;if(S.disc&&S.disc.id===id)S.disc=null;sfx('buy');
-  if(t.t==='auto')toast('🗺️ General Staff assembled','Auto-Assault is available at High Command.','grn');
-  renderTechs();updateStatics();}
-function setLaw(k){if(LAWS[k].req>S.tension)return;S.law=k;renderLaw();}
+async function buyTech(id){
+  const t=TECHS.find(x=>x.id===id);if(!t||S.tech[id])return;
+  const result=await runServerAction('buy-tech',{id},true);
+  if(result){
+    sfx('buy');
+    if(t.t==='auto')toast('🗺️ General Staff assembled','Auto-Assault is available at High Command.','grn');
+    renderTechs();updateStatics();
+  }
+}
+async function setLaw(k){
+  const result=await runServerAction('set-law',{id:k},true);
+  if(result)renderLaw();
+}
 function pactCost(b){let mt=0;for(const c of COUNTRIES)if(c.bloc===b&&!S.conq[c.code])mt=Math.max(mt,c.tier);
   return Math.ceil(1500*Math.pow(2.2,mt)*(1-0.15*shopLvl('diplomat')));}
-function signPact(b){const c=pactCost(b);if(S.gold<c||pactActive(b))return;
-  S.gold-=c;S.pacts[b]=Date.now()+600000+120000*shopLvl('diplomat');sfx('buy');
-  toast('🕊️ Pact signed','The '+BLOCS[b]+' will not reinforce its members for 10 minutes.','grn');renderPacts();}
+async function signPact(b){
+  const result=await runServerAction('sign-pact',{bloc:b},true);
+  if(result){
+    sfx('buy');
+    toast('🕊️ Pact signed','The '+BLOCS[b]+' will not reinforce its members for 10 minutes.','grn');
+    renderPacts();
+  }
+}
 
-function siegeRate(){return 0.12*(1+0.2*shopLvl('timeworn'));}
+function siegeRate(){return 0.12;}
 function entrench(c,info){return defOf(c)*info.aF*info.fx*(info.rs||1)*(1-defRed());}
-function setSiege(code){const c=BY[code];if(!c||S.conq[code])return;
+let serverCombatAcc=0,autoTargetAt=0;
+async function setSiege(code){
+  const c=BY[code];if(!c||S.conq[code])return;
   const gate=canSiege(c);if(gate){toast('🔒 '+c.name,gate,'bad');return;}
-  if(S.target!==code){S.target=code;refreshTargets();}}
-function applyCasualties(info,AP,f){if(AP>=info.eff*40)return 0;
-  if(S.shieldUntil>Date.now())return 0;
-  const frac=info.eff/(info.eff+AP)*f*casMult();
-  const cas=Math.min(Math.floor(S.mp),Math.floor(S.mp*frac));
-  if(cas>0){S.mp-=cas;S.st.cas+=cas;META.lifeCas+=cas;
-    if(S.ch.nocas&&!S.chFail.nocas){S.chFail.nocas=true;
-      toast('🩸 Doctrine broken','Bloodless Mandate voided — casualties were taken.','bad');}}
-  return cas;}
-function cmdRisk(info,AP,c,base,dt){const g=cmdGen();if(!g)return;
-  const ratio=info.eff/AP;if(ratio<=0.25)return;
-  let p=Math.min(0.025,base*ratio)*(dt||1);
-  if(S.tech.guard)p*=0.5;if(S.realm>=3)p*=0.7;
-  p*=1-0.5*Math.min(1,share('sf')*5);
-  if(Math.random()<p)killGeneral(g,c);}
-function annihilate(c,info){S.st.atk++;S.st.dmg+=info.eff;
-  floatAtCard(c.code,'💥 ANNIHILATED','dmg');conquer(c);}
-function dealDamage(c,info,dmg,silent){
-  const newEff=Math.max(0,info.eff-dmg);
-  if(newEff<=0){conquer(c);}
-  else{S.hp[c.code]=newEff/(info.aF*info.fx*(info.rs||1)*(1-defRed()));
-    if(!silent)floatAtCard(c.code,'−'+fmt(dmg),'dmg');}}
-function burst(code,quiet){const c=BY[code];if(!c||S.conq[code])return;
-  if(canSiege(c)){if(!quiet)setSiege(code);return;}
-  if(S.mp<1){if(!quiet)toast('No troops','Mobilize recruits before ordering an assault.','bad');return;}
-  setSiege(code);
-  const AP=armyPower(),info=effInfo(c),ent=entrench(c,info);
-  if(AP>=ent*annThresh()){annihilate(c,info);return;}
-  if(Date.now()<(S.stormCd||0)){return;}
-  S.stormCd=Date.now()+2000;
-  const dmg=Math.min(AP*0.35*rand(0.9,1.1),ent*0.18*(1+Math.min(1,share('air'))));
-  S.st.atk++;S.st.dmg+=Math.min(dmg,info.eff);
-  applyCasualties(info,AP,0.06);
-  cmdRisk(info,AP,c,0.004);
-  dealDamage(c,info,dmg,!!quiet);if(!quiet)sfx('hit');}
-function combatTick(dt){const code=S.target;
-  if(code&&!S.conq[code]&&S.mp>=1){const c=BY[code];
-    const AP=armyPower(),info=effInfo(c),ent=entrench(c,info);
-    if(AP>=ent*annThresh()){annihilate(c,info);return;}
-    const dmg=Math.min(AP*siegeRate()*dt,ent*0.08*(1+Math.min(1,share('air')))*dt);
-    S.st.dmg+=Math.min(dmg,info.eff);
-    if(shopLvl('strategist')&&S.auto&&S.tech.staff){
-      S.stAcc=(S.stAcc||0)+dt;
-      if(S.stAcc>=3){S.stAcc=0;burst(code,true);if(S.conq[code])return;}}
-    if(AP<info.eff*40&&S.shieldUntil<=Date.now()){
-      S.casAcc=(S.casAcc||0)+S.mp*(info.eff/(info.eff+AP))*0.035*casMult()*dt;
-      const w=Math.floor(S.casAcc);
-      if(w>0){S.casAcc-=w;const real=Math.min(Math.floor(S.mp),w);
-        if(real>0){S.mp-=real;S.st.cas+=real;META.lifeCas+=real;
-          if(S.ch.nocas&&!S.chFail.nocas){S.chFail.nocas=true;
-            toast('🩸 Doctrine broken','Bloodless Mandate voided — casualties were taken.','bad');}}}}
-    const g=cmdGen();
-    if(g&&!S.riskW[code]&&info.eff>AP*1.5){S.riskW[code]=1;
-      toast('⚠️ Commander at risk',g.name+' besieges far above your weight — permadeath odds are elevated. Praetorian Guard and Core Formation help.','bad');}
-    if(g){g.xp+=0.15*dt;
-      if(g.xp>=g.lvl*4){g.xp=0;g.lvl++;noteGen(g);
-        toast('🎖️ Promotion',g.name+' reached level '+g.lvl+'.','grn');renderGenerals();}
-      cmdRisk(info,AP,c,0.003,dt);}
-    dealDamage(c,info,dmg,true);}
-  if(S.anchorUntil>Date.now())return;
-  for(const k in S.hp){if(k===S.target||S.conq[k])continue;
-    const cc=BY[k];if(!cc)continue;const D=defOf(cc);
-    S.hp[k]=Math.min(D,S.hp[k]+D*0.025*dt);
-    if(S.hp[k]>=D)delete S.hp[k];}}
-function conquer(c){S.conq[c.code]=1;delete S.hp[c.code];
-  let loot,rec;
-  if(c.plane){loot=Math.pow(defOf(c),0.72)*50*goldMult();
-    rec=Math.pow(defOf(c),0.6)*10*mpMult();}
-  else{loot=defOf(c)*0.3*goldMult();rec=c.pop*800*mpMult();}
-  if(hasLegend('palkia')){loot*=1.35;rec*=1.35;}if(megaZygardeActive()){loot*=5;rec*=3;}if(hasLegend('zygarde'))loot*=1.20;
-  if(S.warpath){loot*=3;rec*=3;S.warpath=false;
-    toast('🌀 Phase-strike','Teleportation Legions triple the spoils of '+c.name+'.','cyan');}
-  S.gold+=loot;S.st.goldE+=loot;S.mp+=rec;S.st.mpRec+=rec;S.st.won++;META.lifeWon++;
-  S.renown+=Math.pow(c.tier+1,2);
-  if(c.plane==='pokemon'&&c.badge&&!S.badges[c.code]){S.badges[c.code]=1;S.poke.balls+=2;S.poke.shards+=3;if(c.pregion==='kalos'&&badgeCount('kalos')%2===0)S.poke.megaStones++;
-    const bd=BADGES.find(b=>b[0]===c.code);toast((bd?bd[1]:'🏅')+' BADGE EARNED',(bd?bd[3]+' '+bd[2]:'League')+' Badge secured · +2 Poké Balls · +3 Evolution Shards · capture chance improved.','grn');}
-  if(c.code==='sing')unlockEnding('tech','Technological Singularity');
-  S.tension=Math.min(100,S.tension+(c.tier+1)*1.1);
-  if(S.target===c.code)S.target=null;
-  const g=cmdGen();if(g)g.xp+=c.tier;
-  toast('🏳️ '+c.name+' has fallen','Loot '+fmt(loot)+' gold · '+fmt(rec)+' recruits rally to you','grn');
-  sfx('conq');confettiAtCard(c.code);rebuildCard(c.code);
-  regionCheck(c.region);renderPacts();updateRegionTabs();
-  planeCheck(c.plane||'earth');victoryCheck();}
-function planeCheck(id){if(S.pc[id]||!planeClearedId(id))return;
-  S.pc[id]=1;const i=planeIdx(id);sfx('realm');
-  if(id==='earth'){if(!META.fastEarth||S.playSec<META.fastEarth)META.fastEarth=S.playSec;
-    unlockEnding('mil','Military Domination');
-    if(S.ch.nocas&&!S.chFail.nocas)unlockEnding('peace','One World Government');}
-  const nxt=PLANES[i+1];
-  if(nxt){toast('🌀 '+PLANES[i].n.toUpperCase()+' IS YOURS','The veil tears open: the '+nxt.ico+' '+nxt.n+' awaits. '+nxt.feat,'cyan');
-    if(nxt.id==='cult'&&S.realm<1){S.realm=1;
-      toast('☯️ The Dao stirs','Qi Gathering begins — breakthroughs are now possible in the Cultivation tab.','cyan');}
-    if(nxt.id==='magic')toast('🔮 Mana awakens','Arcane territories yield Mana; the Spells tab is open.','cyan');}
-  renderPlaneRow();updateStatics();}
-function regionCheck(r){if(!RNAME[r]||S.rc[r])return;
-  for(const c of COUNTRIES)if(c.region===r&&!S.conq[c.code])return;
-  S.rc[r]=1;const bonus=Math.floor(90*rates().gps+3000);S.gold+=bonus;S.st.goldE+=bonus;
-  toast('🌍 '+RNAME[r]+' UNIFIED','Regional command grants +10% army power and '+fmt(bonus)+' gold.','grn');sfx('realm');}
-function victoryCheck(){if(S.won||conqCount()<ALLT.length)return;S.won=true;if(S.ch&&S.ch.megaZygarde)completeMegaZygardeGauntlet();
-  if(!META.fastWin||S.playSec<META.fastWin)META.fastWin=S.playSec;META.wins++;showVictory();}
+  const result=await runServerAction('set-target',{code},true);
+  if(result)refreshTargets();
+}
+async function toggleSiege(code){
+  const result=await runServerAction('set-target',{code:S.target===code?'':code},true);
+  if(result)refreshTargets();
+}
+function showCombatResult(envelope,quiet){
+  const r=envelope&&envelope.result;if(!r)return;
+  const c=BY[r.code];
+  if(r.damage>0&&c)floatAtCard(r.code,(r.annihilated?'💥 ':'−')+fmt(Number(r.damage)||0),'dmg');
+  if(r.casualties>0)toast('🩸 Battlefield losses',fmt(Number(r.casualties))+' soldiers were lost.','bad');
+  if(r.commanderAtRisk)toast('⚠️ Commander at risk',r.commanderAtRisk.name+' is fighting far above your weight.','bad');
+  if(r.promoted)toast('🎖️ Promotion',r.promoted.name+' reached level '+r.promoted.lvl+'.','grn');
+  if(r.generalLost){sfx('death');showModal('⚰️ A GENERAL HAS FALLEN','<p><b>'+htmlEscape(r.generalLost.title+' '+r.generalLost.name)+'</b> died leading the assault.</p><p class="small" style="margin-top:8px">The server recorded this permanent loss.</p>',[{t:'Honor the fallen'}]);}
+  if(r.conquered&&c){
+    toast('🏳️ '+c.name+' has fallen','Loot '+fmt(Number(r.loot)||0)+' gold · '+fmt(Number(r.recruits)||0)+' recruits rally to you','grn');
+    sfx('conq');confettiAtCard(c.code);rebuildCard(c.code);renderPacts();updateRegionTabs();renderPlaneRow();
+    if(r.regionCleared)toast('🌍 '+(r.regionName||r.regionCleared)+' UNIFIED','Regional command grants +10% army power and '+fmt(Number(r.regionBonus)||0)+' gold.','grn');
+    if(r.planeCleared)toast('🌀 '+String(r.planeCleared).toUpperCase()+' IS YOURS','The next plane has been unlocked by the server.','cyan');
+    if(r.won)showVictory();
+  }else if(!quiet&&r.damage>0)sfx('hit');
+  refreshTargets();updateCards();updateMap();updateRegionTabs();updateTop();
+}
+async function burst(code,quiet){
+  const result=await runServerAction('attack',{mode:'burst',code},true);
+  if(result)showCombatResult(result,!!quiet);
+}
+function combatTick(dt){
+  if(AUTHORITY_PHASE<3||!S.target||S.conq[S.target]||S.mp<1||actionBusy)return;
+  serverCombatAcc+=Math.max(0,dt);
+  if(serverCombatAcc<0.75)return;
+  serverCombatAcc=0;
+  void runServerAction('attack',{mode:'siege'},true).then(result=>{if(result)showCombatResult(result,true);});
+}
+// Legacy local combat mutators stay disabled. Combat, commanders and spells are server-authoritative.
+function applyCasualties(){return 0;}
+function cmdRisk(){}
+function annihilate(){}
+function dealDamage(){toast('Server migration','Combat spells move to the server in Step 4.','bad');}
+function conquer(){}
+function planeCheck(){}
+function regionCheck(){}
+function victoryCheck(){}
 
 /* ================= generals ================= */
 function recruitCostG(){return{g:500*Math.pow(4,S.gens.length),m:200*Math.pow(2,S.gens.length)};}
@@ -2428,29 +2620,23 @@ function makeGeneral(forceR){const r=(forceR!==undefined)?forceR:rollRarity();
   const free=GNAMES.filter(n=>!used.has(n));
   return{id:S.gid++,name:free.length?pick(free):pick(GNAMES),
     title:pick(GTITLES[r][spec]),spec,r,lvl:1,xp:0,bio:pick(GBIOS[spec])};}
-function recruitGeneral(mode){let g;
-  if(mode==='h'){const c=heroicCost();if(S.renown<c)return;
-    S.renown-=c;S.summons.h++;
-    const roll=Math.random();
-    g=makeGeneral(roll<(shopLvl('mythic')?0.05:0)?4:(roll<0.30?3:2));}
-  else if(mode==='m'){if(!shopLvl('mythic'))return;
-    const c=mythicCost();if(S.renown<c)return;
-    S.renown-=c;S.summons.m++;
-    g=makeGeneral(Math.random()<0.3?4:3);}
-  else{const c=recruitCostG();
-    if(S.gold<c.g||S.mp<c.m)return;S.gold-=c.g;S.mp-=c.m;
-    g=makeGeneral(undefined);g.r=Math.min(g.r,2);}
-  S.gens.push(g);noteGen(g);sfx('buy');
-  if(!META.seenGenTut){META.seenGenTut=1;
-    showModal('🎖️ THE OFFICER CORPS','<p>Generals are force multipliers. A <b>combat</b> officer given command multiplies every assault — but faces <b class="red">permadeath</b> when you besiege above your weight. Economy and logistics officers help passively and never risk the front.</p><p class="small" style="margin-top:8px">Praetorian Guard research and Core Formation soften the risk. Renown from conquest buys guaranteed high-rank summons.</p>',[{t:'Understood'}]);}
+async function recruitGeneral(mode){
+  const mapped=mode==='h'?'heroic':(mode==='m'?'mythic':'standard');
+  const result=await runServerAction('recruit-general',{mode:mapped},true);
+  if(!result||!result.result||!result.result.general)return;
+  const g=result.result.general;sfx('buy');
   toast(RARITY[g.r].ico+' '+RARITY[g.r].n+' officer',g.title+' '+g.name+' joins your staff.',g.r>=3?'grn':'');
-  if(g.r>=3)sfx('realm');
-  renderGenerals();}
+  if(g.r>=3)sfx('realm');renderGenerals();
+}
 function trainCost(g){return Math.floor(100*Math.pow(2.2,g.lvl)*(1+g.r));}
-function trainGeneral(id){const g=S.gens.find(x=>x.id===id);if(!g)return;
-  const c=trainCost(g);if(S.gold<c)return;S.gold-=c;g.lvl++;g.xp=0;noteGen(g);sfx('buy');renderGenerals();}
-function setCommander(id){const g=S.gens.find(x=>x.id===id);
-  if(!g||g.spec!=='combat')return;S.cmd=(S.cmd===id)?null:id;renderGenerals();}
+async function trainGeneral(id){
+  const result=await runServerAction('train-general',{id},true);
+  if(result){sfx('buy');renderGenerals();}
+}
+async function setCommander(id){
+  const result=await runServerAction('set-commander',{id},true);
+  if(result)renderGenerals();
+}
 function killGeneral(g,c){S.gens=S.gens.filter(x=>x.id!==g.id);
   if(S.cmd===g.id)S.cmd=null;S.st.gensLost++;sfx('death');
   showModal('⚰️ A GENERAL HAS FALLEN',
@@ -2477,39 +2663,26 @@ const SPELLS=[
  {id:'warpath',ico:'🌀',n:'Teleportation Legions',base:900,g:1.5,
   d:'Strike from nowhere: your next conquest yields triple loot and triple recruits.'}];
 function spellCost(sp){return Math.floor(sp.base*Math.pow(sp.g,S.spells[sp.id]||0));}
-function castSpell(id){const sp=SPELLS.find(x=>x.id===id);if(!sp||!magicUnlocked())return;
-  const cost=spellCost(sp);if(S.mana<cost)return;
-  if((id==='fire'||id==='mind')&&(!S.target||S.conq[S.target])){
-    toast('🔮 No target','Lay siege to a territory first.','bad');return;}
-  S.mana-=cost;S.spells[id]=(S.spells[id]||0)+1;sfx('realm');
-  if(id==='fire'){const c=BY[S.target],info=effInfo(c);
-    const dmg=Math.min(armyPower()*25,entrench(c,info)*0.6);
-    S.st.dmg+=Math.min(dmg,info.eff);
-    toast('🔥 FIRESTORM',fmt(dmg)+' arcane damage sears '+c.name+'.','cyan');
-    dealDamage(c,info,dmg,false);}
-  else if(id==='shield'){S.shieldUntil=Date.now()+60000;
-    toast('🛡️ ARCANE WARD','Your legions are untouchable for 60 s.','cyan');}
-  else if(id==='mind'){const c=BY[S.target],rem=(S.hp[c.code]!==undefined)?S.hp[c.code]:defOf(c);
-    S.hp[c.code]=rem*0.8;
-    toast('🧠 MIND FRACTURE',c.name+'&#39;s garrison wavers — defense −20%.','cyan');}
-  else if(id==='summon'){S.summonUntil=Date.now()+45000;
-    toast('🜂 SUMMONING CIRCLE','Spirit legions march beside you — army power ×2 for 45 s.','cyan');}
-  else if(id==='anchor'){S.anchorUntil=Date.now()+120000;
-    toast('⚓ REALITY ANCHOR','The world holds its breath — no fortification repairs for 120 s.','cyan');}
-  else if(id==='transmute'){const gain=Math.floor(rates().gps*150+500);
-    S.gold+=gain;S.st.goldE+=gain;
-    toast('🜛 TRANSMUTATION','+'+fmt(gain)+' gold condenses from base matter.','cyan');}
-  else if(id==='warpath'){S.warpath=true;
-    toast('🌀 TELEPORTATION LEGIONS','Your armies phase between worlds — next conquest pays ×3.','cyan');}
-  renderSpells();}
+async function castSpell(id){
+  const sp=SPELLS.find(x=>x.id===id);if(!sp||!magicUnlocked())return;
+  const envelope=await runServerAction('cast-spell',{id},true);if(!envelope||!envelope.result)return;
+  const r=envelope.result;sfx('realm');
+  if(id==='fire'){toast('🔥 FIRESTORM',fmt(Number(r.damage)||0)+' server-verified arcane damage.','cyan');showCombatResult(envelope,false);}
+  else if(id==='shield')toast('🛡️ ARCANE WARD','Your legions are protected for 60 seconds.','cyan');
+  else if(id==='mind')toast('🧠 MIND FRACTURE','The target permanently loses 20% of its remaining defense.','cyan');
+  else if(id==='summon')toast('🜂 SUMMONING CIRCLE','Spirit legions double server combat power for 45 seconds.','cyan');
+  else if(id==='anchor')toast('⚓ REALITY ANCHOR','Damaged territories cannot repair for 120 seconds.','cyan');
+  else if(id==='transmute')toast('🜛 TRANSMUTATION','+'+fmt(Number(r.gain)||0)+' gold condenses from base matter.','cyan');
+  else if(id==='warpath')toast('🌀 TELEPORTATION LEGIONS','The next conquest grants triple loot and recruits.','cyan');
+  renderSpells();refreshTargets();updateCards();
+}
 
 /* ================= cultivation ================= */
-function realmCost(i){return Math.floor(REALMS[i].cost*(1-0.2*shopLvl('tribheart')));}
-function advanceRealm(){const nxt=REALMS[S.realm+1];if(!nxt||S.realm<1)return;
-  const c=realmCost(S.realm+1);
-  if(S.qi<c)return;S.qi-=c;S.realm++;sfx('realm');
-  if(S.realm>=5)unlockEnding('asc','Spiritual Ascension');
-  toast('☯️ BREAKTHROUGH','You ascend to '+REALMS[S.realm].n+'. '+REALMS[S.realm].d,'cyan');
+function realmCost(i){return Math.floor(REALMS[i].cost*Math.max(0,1-0.2*shopLvl('tribheart')));}
+async function advanceRealm(){const nxt=REALMS[S.realm+1];if(!nxt||S.realm<1)return;
+  const result=await runServerAction('advance-realm',{},true);if(!result||!result.result)return;
+  sfx('realm');toast('☯️ BREAKTHROUGH','You ascend to '+REALMS[S.realm].n+'. '+REALMS[S.realm].d,'cyan');
+  if(result.result.ending)toast('🏵 TRUE ENDING','“'+result.result.ending.name+'” is inscribed in the server record.','grn');
   renderRealm();updateStatics();}
 
 /* ================= prestige ================= */
@@ -2538,49 +2711,55 @@ async function claimPrestige(mode){
     SERVER_REVISION=result.revision;META=result.state.META;S=result.state.S;GLOBAL_BOARDS.loadedAt=0;
     showStart();
     toast(mode==='gauntlet'?'🧬 ORDER GAUNTLET ARMED':'⭐ +'+fmt(result.awardedPrestige)+' Prestige',
-      mode==='gauntlet'?'Begin a new campaign. Tiny Army and Bloodless rules are mandatory; automation and battle transformations are forbidden.':'The validated claim is now recorded globally.','grn');
+      mode==='gauntlet'?'Begin a new campaign. Tiny Army and Bloodless rules are mandatory; automation and battle transformations are forbidden.':'The validated claim is stored on the server; rankings remain paused until Step 5.','grn');
   }catch(error){toast('Prestige rejected',error.message,'bad');}
 }
 async function performPrestige(){await claimPrestige('standard');}
-function buyShop(id){const it=SHOP.find(x=>x.id===id);const l=shopLvl(id);
-  if(l>=it.max)return;const c=Math.floor(it.cost(l));if(META.pp<c)return;
-  META.pp-=c;META.shop[id]=l+1;sfx('buy');renderShop();updateStatics();save();}
+async function buyShop(id){
+  const result=await runServerAction('buy-shop',{id},true);
+  if(result){sfx('buy');renderShop();updateStatics();updateTop();}
+}
 
 /* ================= events & raids ================= */
-function fireEvent(){const rt=rates();const roll=Math.random();
-  if(roll<0.22){const a=Math.floor(45*rt.gps+500);S.gold+=a;S.st.goldE+=a;
-    toast('🪙 Trade windfall','+'+fmt(a)+' gold flows into the treasury.','grn');}
-  else if(roll<0.44){const a=Math.floor(30*rt.mps+120);S.mp+=a;S.st.mpRec+=a;
-    toast('🪖 Volunteer surge','+'+fmt(a)+' recruits answer the call.','grn');}
-  else if(roll<0.6){const un=TECHS.filter(t=>!S.tech[t.id]&&!techLocked(t));
-    if(un.length){un.sort((a,b)=>a.cost-b.cost);const t=un[0];S.disc={id:t.id,off:0.35};
-      toast('💡 Breakthrough',t.n+' research is 35% off until purchased.','cyan');renderTechs();}
-    else{const a=Math.floor(30*rt.gps+400);S.gold+=a;toast('🪙 Windfall','+'+fmt(a)+' gold.','grn');}}
-  else if(roll<0.82){const held=COUNTRIES.filter(c=>S.conq[c.code]&&c.code!==S.startCode&&!(S.rebels[c.code]>Date.now()));
-    if(held.length){const c=pick(held);const cost=Math.ceil(20*Math.pow(2.5,c.tier));
-      showModal('🔥 REBELLION IN '+c.name.toUpperCase(),
-        '<p>'+c.flag+' Partisans rise against the occupation. Crush them now, or the province produces nothing for 75 seconds.</p>',
-        [{t:'Quell — '+fmt(cost)+' 🪖',fn:()=>{if(S.mp>=cost){S.mp-=cost;
-            toast('🔥 Rebellion crushed',c.name+' is pacified.','');}
-          else{S.rebels[c.code]=Date.now()+75000;toast('🔥 Not enough troops',c.name+' burns for 75 s.','bad');}
-          rebuildCard(c.code);}},
-         {t:'Let it burn',cls:'danger',fn:()=>{S.rebels[c.code]=Date.now()+75000;S.tension=Math.min(100,S.tension+3);
-          rebuildCard(c.code);}}]);}
-    else{const a=Math.floor(25*rt.gps+300);S.gold+=a;toast('🪙 Quiet frontier','+'+fmt(a)+' gold in taxes.','grn');}}
-  else{if(S.realm>=1){const a=Math.floor(40*rt.qps+60);S.qi+=a;
-      toast('☯️ Ley-line surge','+'+fmt(a)+' Qi wells up from the land.','cyan');}
-    else{const a=Math.floor(35*rt.gps+350);S.gold+=a;toast('🪙 Windfall','+'+fmt(a)+' gold.','grn');}}}
-function tryRaid(){if(conqCount()<8||S.tension<25)return;
-  if(Math.random()>=S.tension/100*0.35)return;
-  const AP=Math.max(50,armyPower());
-  const pTier=clamp(Math.round(Math.log(AP/50)/Math.log(9)),1,9);
-  const pool=COUNTRIES.filter(c=>!S.conq[c.code]&&c.tier>=Math.max(1,pTier-1)&&c.tier<=Math.min(9,pTier+1));
-  if(!pool.length)return;const c=pick(pool);
-  let loss=Math.min(S.mp*0.18,90*Math.pow(3,c.tier))*casMult()*Math.pow(0.5,shopLvl('ironwill'));
-  loss=Math.floor(loss);if(loss<1)return;
-  S.mp-=loss;S.st.cas+=loss;META.lifeCas+=loss;
-  toast('🚨 BORDER RAID','Vengeful '+c.flag+' '+c.name+' strikes your lines — '+fmt(loss)+' soldiers lost. (Raids never void doctrines.)','bad');
-  sfx('death');}
+let lastWorldEventId='',worldPulseBusy=false;
+function presentWorldResult(envelope){
+  const r=envelope&&envelope.result;if(!r)return;
+  if(r.event){
+    if(r.event.kind==='gold')toast('🪙 Trade windfall','+'+fmt(Number(r.event.amount)||0)+' gold flows into the treasury.','grn');
+    else if(r.event.kind==='manpower')toast('🪖 Volunteer surge','+'+fmt(Number(r.event.amount)||0)+' recruits answer the call.','grn');
+    else if(r.event.kind==='qi')toast('☯️ Ley-line surge','+'+fmt(Number(r.event.amount)||0)+' Qi wells up from the land.','cyan');
+    else if(r.event.kind==='discount')toast('💡 Breakthrough','A server-verified technology discount is ready.','cyan');
+  }
+  if(r.raid)toast('🚨 BORDER RAID','Vengeful '+(BY[r.raid.country]?BY[r.raid.country].name:r.raid.country)+' strikes your lines — '+fmt(Number(r.raid.loss)||0)+' soldiers lost.','bad');
+  if(r.rift){
+    if(r.rift.outcome==='repelled')toast('🕳️ INFINITE RIFT REPELLED','Rift rank '+r.rift.level+' awards +'+fmt(Number(r.rift.pp)||0)+' PP.','grn');
+    else toast('🕳️ RIFT BREAKTHROUGH','The incursion costs '+fmt(Number(r.rift.loss)||0)+' soldiers.','bad');
+  }
+  const p=r.pendingEvent;
+  if(p&&p.kind==='rebellion'&&p.id!==lastWorldEventId&&!modalUp){
+    lastWorldEventId=p.id;
+    showModal('🔥 REBELLION IN '+String(p.name||p.country).toUpperCase(),
+      '<p>Partisans rise against the occupation. The server will either deduct the troops needed to quell them or suspend the province for 75 seconds.</p>',
+      [{t:'Quell — '+fmt(Number(p.cost)||0)+' 🪖',fn:()=>void resolveServerRebellion(p.id,'quell')},
+       {t:'Let it burn',cls:'danger',fn:()=>void resolveServerRebellion(p.id,'burn')}]);
+  }
+}
+async function resolveServerRebellion(eventId,choice){
+  const result=await runServerAction('resolve-rebellion',{eventId,choice},true);
+  if(!result)return;
+  const r=result.result||{};
+  if(r.outcome==='quelled')toast('🔥 Rebellion crushed','The province is pacified.','grn');
+  else if(r.outcome==='insufficient')toast('🔥 Not enough troops','The province burns for 75 seconds.','bad');
+  else toast('🔥 Province in revolt','Production is suspended for 75 seconds.','bad');
+  updateCards();updateTop();
+}
+async function fireEvent(){
+  if(worldPulseBusy||actionBusy||AUTHORITY_PHASE<3)return;
+  worldPulseBusy=true;
+  try{const result=await runServerAction('world-pulse',{},true);if(result)presentWorldResult(result);}
+  finally{worldPulseBusy=false;}
+}
+function tryRaid(){void fireEvent();}
 
 /* ================= offline ================= */
 function offlineGains(serverSeconds){
@@ -2746,7 +2925,7 @@ function buildMap(){const svg=$('worldMap');if(!svg||!S)return;svg.innerHTML='';
     const t=document.createElementNS(SVGNS,'title');
     t.textContent=c.flag+' '+c.name+' — T'+c.tier+' · def '+fmt(defOf(c));m.appendChild(t);
     m.addEventListener('click',()=>{if(MDRAG.moved||!S||S.conq[c.code])return;
-      if(S.target===c.code){S.target=null;refreshTargets();}else setSiege(c.code);});
+      void toggleSiege(c.code);});
     MREFS[c.code]=m;}
   updateMap();}
 function updateMap(){if(!S)return;
@@ -2798,7 +2977,7 @@ function fillCard(code){const c=BY[code],R=CARDS[code],el=R.el;
     R.bar=el.querySelector('.bar i');R.eff=el.querySelector('.eff');
     R.cas=el.querySelector('.cas');R.eta=el.querySelector('.eta');
     R.btn=el.querySelector('.atk');R.rebel=null;R.inc=null;
-    el.querySelector('.hd').onclick=()=>{S.target=(S.target===code)?null:code;refreshTargets();};
+    el.querySelector('.hd').onclick=()=>{void toggleSiege(code);};
     R.btn.onclick=()=>burst(code);}
   applyFilterOne(code);refreshTargets();}
 function rebuildCard(code){if(CARDS[code])fillCard(code);}
@@ -3037,12 +3216,10 @@ function renderAch(){const g=$('achGrid');g.innerHTML='';let got=0;
     d.innerHTML='<span class="ico">'+a.ico+'</span><div><div class="nm">'+a.n+
       '</div><div class="ds">'+a.d+'</div></div>';g.appendChild(d);}
   $('achCount').textContent=got+' / '+ACH.length;}
-function checkAch(){let ch=false;
-  for(const a of ACH){if(META.ach[a.id])continue;let ok=false;
-    try{ok=a.t();}catch(e){}
-    if(ok){META.ach[a.id]=1;ch=true;
-      toast('🏅 Honor earned',a.n+' — '+a.d,'grn');sfx('realm');}}
-  if(ch)renderAch();}
+function checkAch(){
+  // Authority Phase 6: achievements are awarded from canonical server state.
+  renderAch();
+}
 function renderStats(){if(!S)return;const rows=[
   ['Run time',timeFmt(S.playSec)],['Territories held',conqCount()+' / '+ALLT.length],
   ['Planes mastered',Object.keys(S.pc||{}).length+' / '+PLANES.length],
@@ -3215,7 +3392,17 @@ function switchTab(name){if(name==='cult'&&(!S||!cultUnlocked()))return;
   TABORDER.forEach(t=>{const s=$('tab-'+t);if(s)s.classList.toggle('hidden',t!==name);});}
 document.querySelectorAll('#tabs button').forEach(b=>{b.onclick=()=>switchTab(b.dataset.tab);});
 $('seal').addEventListener('click',()=>{if(S)doClick();});
-$('autoTgl').addEventListener('change',e=>{if(!S)return;if(S.ch&&S.ch.megaZygarde&&e.target.checked){S.chFail.megaZygarde=1;e.target.checked=false;S.auto=false;toast('Order Gauntlet failed','Automation is forbidden in this challenge.','bad');return;}S.auto=e.target.checked;});
+$('autoTgl').addEventListener('change',async e=>{
+  if(!S)return;
+  const enabled=!!e.target.checked;
+  const result=await runServerAction('set-auto',{enabled},true);
+  if(!result)e.target.checked=!!S.auto;
+  else{
+    e.target.checked=!!S.auto;
+    if(result.result&&result.result.blocked)toast('Order Gauntlet failed',result.result.reason,'bad');
+    $('autoState').textContent=S.auto?'ON':'off';
+  }
+});
 $('searchBox').addEventListener('input',e=>{Q=e.target.value.toLowerCase();applyFilter();});
 $('advBtn').addEventListener('click',()=>{if(S)advanceRealm();});
 $('prestigeBtn').addEventListener('click',()=>{if(S)doPrestige();});
@@ -3228,7 +3415,12 @@ $('hintSkip').addEventListener('click',()=>{META.tut=true;$('hintBar').classList
 document.addEventListener('keydown',e=>{if(!S)return;
   const tg=e.target.tagName;if(tg==='INPUT'||tg==='SELECT'||tg==='TEXTAREA')return;
   if(e.key==='r'||e.key==='R'){doClick();e.preventDefault();return;}
-  if(e.key===' '){S.speed=(S.speed===0)?1:0;renderSpeed();e.preventDefault();return;}
+  if(e.key===' '){
+    e.preventDefault();
+    const speed=S.speed===0?1:0;
+    void runServerAction('set-speed',{speed},true).then(result=>{if(result)renderSpeed();});
+    return;
+  }
   const i=parseInt(e.key,10);if(i>=1&&i<=8)switchTab(TABORDER[i-1]);});
 async function updateCommanderNameFrom(value){
   const name=(String(value||'').trim()||'Commander').slice(0,20);
@@ -3321,8 +3513,8 @@ $('startBtn').addEventListener('click',async()=>{
   const candidate=newRun(code,doctrines);$('startBtn').disabled=true;
   try{
     const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines,state:{S:candidate,META}});
-    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;
-    for(let i=0;i<shopLvl('veteran');i++)S.gens.push(makeGeneral(1));save();enterGame();
+    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||4;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
+    enterGame();
     const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The server has opened a validated run.','grn');
   }catch(error){toast('Campaign could not start',error.message,'bad');}
   finally{$('startBtn').disabled=false;}
@@ -3343,34 +3535,22 @@ let last=Date.now(),uiAcc=0,slowAcc=0,saveAcc=0;
 function renderSpeed(){const w=$('speedRow');if(!w||!S)return;w.innerHTML='';
   [[0,'⏸'],[1,'1×'],[2,'2×'],[4,'4×']].forEach(p=>{const b=document.createElement('button');
     b.textContent=p[1];if((S.speed===undefined?1:S.speed)===p[0])b.classList.add('on');
-    b.onclick=()=>{S.speed=p[0];renderSpeed();};w.appendChild(b);});}
+    b.onclick=async()=>{const result=await runServerAction('set-speed',{speed:p[0]},true);if(result)renderSpeed();};
+    w.appendChild(b);});}
 function tick(){const now=Date.now();let raw=(now-last)/1000;last=now;
   raw=clamp(raw,0,5);if(!S)return;updateMegaTimer();updateZTimer();
   let dt=raw*(S.speed===undefined?1:S.speed);
-  saveAcc+=raw;if(saveAcc>=5){saveAcc=0;if(stateVersion>lastSavedVersion)save(false);}
+  saveAcc+=raw;if(saveAcc>=5){saveAcc=0;if(!actionBusy)save(false);}
   if(dt<=0){uiAcc+=raw;if(uiAcc>=0.25){uiAcc=0;updateTop();updateCards();updateMap();}return;}
-  S.playSec+=dt;stateVersion++;
   const rt=rates();
-  S.mp+=rt.mps*dt;S.gold+=rt.gps*dt;S.equip+=rt.eps*dt;
-  S.qi+=rt.qps*dt;S.mana+=rt.mana*dt;
-  S.st.mpRec+=rt.mps*dt;S.st.goldE+=rt.gps*dt;
-  const aged=S.mp*dt/lifespan();
-  if(aged>0){S.mp=Math.max(0,S.mp-aged);S.st.aged=(S.st.aged||0)+aged;}
-  clampTrained();
-  S.tension=Math.max(0,S.tension-0.06*dt);
-  if(S.auto&&S.tech.staff&&(!S.target||S.conq[S.target])){
-    const w=weakestFoe();if(w){S.target=w;refreshTargets();}}
-  combatTick(dt);
-  if(S.won){S.infT-=dt;
-    if(S.infT<=0){S.infT=rand(75,120);const lvl=(S.infLvl||0)+1;
-      const threat=defOf(BY.sing)*0.4*Math.pow(1.3,lvl);
-      if(armyPower()>=threat){S.infLvl=lvl;META.pp+=lvl;META.totPP+=lvl;
-        toast('🕳 RIFT LVL '+lvl+' REPELLED','A cosmic incursion of '+fmt(threat)+' power breaks on your lines · +'+lvl+' ⭐ PP','cyan');}
-      else{const loss=Math.floor(S.mp*0.2);S.mp-=loss;S.st.cas+=loss;
-        toast('🕳 RIFT BREAKTHROUGH','An incursion of '+fmt(threat)+' power mauls your legions — '+fmt(loss)+' lost.','bad');}}}
-  if(!modalUp){S.evT-=dt;
-    if(S.evT<=0){S.evT=rand(45,85);fireEvent();}
-    S.raidT-=dt;if(S.raidT<=0){S.raidT=22;tryRaid();}}
+  // Phase 2: resources, aging, training totals and tension are settled by the server.
+  if(S.auto&&S.tech.staff&&(!S.target||S.conq[S.target])&&!actionBusy&&Date.now()>=autoTargetAt){
+    autoTargetAt=Date.now()+1500;const w=weakestFoe();if(w)void setSiege(w);}
+  combatTick(raw);
+  // Infinite-rift challenges are evaluated by the server through world pulses.
+  if(!modalUp&&AUTHORITY_PHASE>=3&&!actionBusy){
+    const a=S.serverAuth||{},next=Math.min(Date.parse(a.nextEventAt||0)||Infinity,Date.parse(a.nextRaidAt||0)||Infinity,Date.parse(a.nextRiftAt||0)||Infinity);
+    if(a.pendingEvent||Date.now()>=next)void fireEvent();}
   uiAcc+=raw;if(uiAcc>=0.25){uiAcc=0;
     updateTop();updateCards();updateMap();updateBuildings();updateBranches();updateTechs();
     updatePacts();updateShop();updateSpells();if(!$('tab-pokemon').classList.contains('hidden'))renderPokemon();updateRealmBtn();updatePrestige();}
@@ -3386,6 +3566,8 @@ async function boot(){
   try{loaded=await gameApi('load');}
   catch(error){showAuth();authMessage(error.message,true);return;}
   ACCOUNT={userId:sessionResult.data.session.user.id,username:loaded.username};SERVER_REVISION=loaded.revision||0;
+  AUTHORITY_PHASE=Number(loaded.authorityPhase)||0;
+  SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},loaded.rates||{});
   saveConflict=false;saveDirty=false;stateVersion=0;lastSavedVersion=0;
   const data=loaded.state||null;$('authScreen').classList.add('hidden');authMessage('');
   const loadedMeta=data&&data.META&&typeof data.META==='object'?data.META:{};
@@ -3416,13 +3598,10 @@ async function boot(){
     // Reopen those flags until the newly-added Kalos territories are conquered.
     if(!planeClearedId('pokemon')){delete S.pc.pokemon;if(S.won)S.won=false;}
     enterGame();
-    const g=offlineGains(loaded.offlineSeconds);
-    if(g){
-      stateVersion++;
-      saveDirty=true;
-      await flushServerSave(false);
-      showModal('🕰️ WHILE YOU WERE AWAY',
-      '<p>'+timeFmt(g.dt)+' passed. Your empire kept working at half pace:</p>'+
+    const g=loaded.economyGain;
+    if(g&&Number(g.dt)>=60){
+      showModal('🕰️ SERVER-VERIFIED OFFLINE GAINS',
+      '<p>'+timeFmt(Number(g.dt)||0)+' passed. Supabase settled your protected economy:</p>'+
       '<div class="statgrid" style="margin-top:10px">'+
       vst('Manpower','+'+fmt(g.mp))+vst('Gold','+'+fmt(g.gold))+
       vst('Equipment','+'+fmt(g.eq))+(g.qi>0?vst('Qi','+'+fmt(g.qi)):'')+
@@ -3431,25 +3610,7 @@ async function boot(){
       [{t:'Back to war'}]);
     }
   }else showStart();}
-// Queue a prompt server save after gameplay actions. The existing 500 ms
-// debounce combines rapid clicks into one request and avoids excessive traffic.
-const gameRoot=$('game');
-if(gameRoot){
-  const noSaveButtonIds=new Set([
-    'saveNowBtn','logoutBtn','zIn','zOut','zReset','hintSkip'
-  ]);
-  gameRoot.addEventListener('click',event=>{
-    const button=event.target.closest('button');
-    if(!button||button.disabled)return;
-    if(noSaveButtonIds.has(button.id)||button.hasAttribute('data-tab'))return;
-    save();
-  });
-  gameRoot.addEventListener('change',event=>{
-    const control=event.target.closest('input,select');
-    if(control)save();
-  });
-}
-
+// Authority Phase 6 uses explicit action and preference saves only.
 // Save when the tab is backgrounded. Full save payloads deliberately avoid
 // fetch keepalive because browsers impose small keepalive body limits.
 document.addEventListener('visibilitychange',()=>{
@@ -3467,7 +3628,7 @@ window.addEventListener('online',()=>{
 // A browser cannot guarantee a final large request during shutdown. Warn only
 // while a save is pending so the player can wait for the Synced status.
 window.addEventListener('beforeunload',event=>{
-  if(ACCOUNT&&(saveDirty||saveBusy)){
+  if(ACCOUNT&&(saveDirty||saveBusy||actionBusy)){
     event.preventDefault();
     event.returnValue='';
   }
