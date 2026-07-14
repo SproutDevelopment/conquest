@@ -2352,6 +2352,9 @@ function defaultMeta(){return{
 };}
 let META=defaultMeta();
 function shopLvl(id){return META.shop[id]||0;}
+function shopCostExact(item,level){
+  return Math.floor(Number(item.cost(Math.max(0,Math.floor(Number(level)||0))))||0);
+}
 function conqCount(){return S?Object.keys(S.conq).length:0;}
 function newRun(){
   throw new Error('A campaign must be started from the command screen.');
@@ -2654,7 +2657,7 @@ function applyOptimisticAction(type,payload){
     META.shop=optimisticObject(META.shop);
     const level=Math.max(0,Math.floor(optimisticNumber(META.shop[id])));
     if(level>=item.max)return false;
-    const cost=Math.ceil(item.cost(level));
+    const cost=shopCostExact(item,level);
     if(optimisticNumber(META.pp)+1e-9<cost)return false;
     META.pp=optimisticNumber(META.pp)-cost;
     META.shop[id]=level+1;
@@ -2776,6 +2779,12 @@ function softResultMatches(command,item){
     const expected=command.optimisticExpectedEnabled;
     return !!item.result&&item.result.enabled===expected;
   }
+  if(command.type==='buy-shop'){
+    const result=item.result||{};
+    return String(result.id||'')===String(command.optimisticShopId||'')&&
+      Number(result.level)===Number(command.optimisticShopLevel)&&
+      Number(result.cost)===Number(command.optimisticShopCost);
+  }
   return true;
 }
 function canSoftConfirmBatch(batch,envelope,resultList){
@@ -2787,28 +2796,40 @@ function canSoftConfirmBatch(batch,envelope,resultList){
 function softConfirmEnvelope(result,batch=null){
   if(result&&result.revision!==undefined)SERVER_REVISION=Number(result.revision);
   if(result&&result.authorityPhase!==undefined)AUTHORITY_PHASE=Number(result.authorityPhase)||0;
-  if(result&&result.rates)SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates);
+  if(result&&result.rates)SERVER_RATES=Object.assign(
+    {mps:0,gps:0,eps:0,qps:0,mana:0},
+    result.rates
+  );
+
   const state=result&&result.state;
-  if(state&&state.META){
-    const previousAch=Object.assign({},META.ach||{});
-    for(const key of AUTH_META_KEYS)if(Object.prototype.hasOwnProperty.call(state.META,key)){
-      // Keep the already-predicted display for shop/PP, but accept every other
-      // canonical metadata field and all newly unlocked achievements.
-      if(key!=='pp'&&key!=='shop')META[key]=copyJson(state.META[key]);
-    }
-    const unlocked=Object.keys(META.ach||{}).filter(id=>META.ach[id]&&!previousAch[id]);
-    if(unlocked.length)renderAch();
-  }
+  const previousAch=Object.assign({},META.ach||{});
+
   if(state&&state.S){
     optimisticCanonicalS=mergeAuthoritativeGameState(state.S);
-    optimisticCanonicalMeta=copyJson(state.META||META);
   }
+
+  if(state&&state.META){
+    // The response contains the confirmed result of the completed batch.
+    // Store it as the new base, then replay only commands that are still
+    // queued. This prevents an older PP/shop snapshot from replacing newer
+    // local purchases.
+    optimisticCanonicalMeta=copyJson(state.META);
+  }else{
+    optimisticCanonicalMeta=copyJson(META);
+  }
+
+  rebuildOptimisticState();
+
+  const unlocked=Object.keys(META.ach||{}).filter(
+    id=>META.ach[id]&&!previousAch[id]
+  );
+  if(unlocked.length)renderAch();
+
   restoreLatestTargetIntent(batch);
   reconcileCombatVisual();
   replayLocalConquests();
   refreshActiveCombatRates('soft-confirmation');
 }
-
 const SERVER_ACTION_BATCH_MAX=20;
 const SERVER_ACTION_QUEUE_MAX=200;
 const SERVER_ACTION_FLUSH_MS=35;
@@ -2988,7 +3009,11 @@ async function flushServerActionQueue(){
     }
 
     const onlyCombat=batch.commands.length>0&&batch.commands.every(command=>command.type==='attack');
-    if(!softConfirmed&&!onlyCombat)refreshAfterActionBatch(batch.commands.map(command=>command.type));
+    const containsShop=batch.commands.some(command=>command.type==='buy-shop');
+    if((!softConfirmed&&!onlyCombat)||containsShop){
+      refreshAfterActionBatch(batch.commands.map(command=>command.type));
+      if(containsShop)updateShop();
+    }
   }catch(error){
     const status=Number(error&&error.status)||0;
 
@@ -3089,6 +3114,19 @@ function runServerAction(type,payload={},quiet=false){
     };
     command.optimisticApplied=applyOptimisticAction(type,payload);
     if(type==='set-auto')command.optimisticExpectedEnabled=!!S.auto;
+    if(type==='buy-shop'&&command.optimisticApplied){
+      const id=String(payload.id||'');
+      command.optimisticShopId=id;
+      command.optimisticShopLevel=Math.max(
+        0,
+        Math.floor(optimisticNumber(META.shop&&META.shop[id]))
+      );
+      const item=SHOP.find(rule=>rule.id===id);
+      command.optimisticShopCost=item
+        ?shopCostExact(item,command.optimisticShopLevel-1)
+        :0;
+      command.optimisticShopPP=optimisticNumber(META.pp);
+    }
     if(CLIENT_VALIDATED_ACTIONS.has(type)&&!command.optimisticApplied){
       if(!pendingServerActionCount())clearOptimisticCanonical();
       resolve(null);
@@ -4127,7 +4165,14 @@ async function claimPrestige(mode){
 }
 async function performPrestige(){await claimPrestige('standard');}
 async function buyShop(id){
-  const result=await runServerAction('buy-shop',{id},true);
+  const item=SHOP.find(rule=>rule.id===String(id||''));
+  if(!item)return;
+  const level=Math.max(0,Math.floor(shopLvl(item.id)));
+  if(level>=item.max)return;
+  const cost=shopCostExact(item,level);
+  if(optimisticNumber(META.pp)+1e-9<cost)return;
+
+  const result=await runServerAction('buy-shop',{id:item.id},true);
   if(result)sfx('buy');
 }
 
@@ -4640,14 +4685,14 @@ function updateRealmBtn(){const b=$('advBtn');
   b.textContent='Breakthrough to '+nxt.n+' — '+fmt(cc)+' ☯️';
   b.disabled=S.qi<cc;}
 function renderShop(){const g=$('shopGrid');g.innerHTML='';SHREFS={};
-  for(const it of SHOP){const l=shopLvl(it.id);
+  for(const it of SHOP){const l=shopLvl(it.id),cost=shopCostExact(it,l);
     const d=document.createElement('div');d.className='oc';
     d.innerHTML='<div class="hd"><span class="ico">'+it.ico+'</span>'+it.n+
       '<span class="lvl">'+l+'/'+it.max+'</span></div><div class="ds">'+it.d(l)+'</div>'+
       (l>=it.max?'<button class="buy owned">MAXED</button>'
-        :'<button class="buy"><span>Ascend</span><span class="c">'+fmt(Math.floor(it.cost(l)))+' ⭐</span></button>');
+        :'<button class="buy"><span>Ascend</span><span class="c">'+fmt(cost)+' ⭐</span></button>');
     if(l<it.max){d.querySelector('.buy').onclick=()=>buyShop(it.id);
-      SHREFS[it.id]={btn:d.querySelector('.buy'),cost:Math.floor(it.cost(l))};}
+      SHREFS[it.id]={btn:d.querySelector('.buy'),cost};}
     g.appendChild(d);}}
 function updateShop(){$('shopPP').textContent=fmt(META.pp);
   for(const id in SHREFS)SHREFS[id].btn.disabled=META.pp<SHREFS[id].cost;}
