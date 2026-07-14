@@ -520,7 +520,8 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
     </div>
     <button id="startBtn">Begin campaign</button>
     <div id="metaLine"></div>
-    <div class="ptitle" style="margin-top:16px">Global leaderboards <span class="r">highest online power per username and country</span></div>
+    <div class="ptitle" style="margin-top:16px">Global leaderboards <span class="r">local-mode scores are unverified</span></div>
+    <p class="note">This build is client-authoritative. Gameplay saves are stored in this browser. Leaderboard submissions are not anticheat-verified.</p>
     <div id="lbStart"></div>
     <p class="small" style="text-align:center;margin-top:8px">Player rankings use registered usernames. Country totals add each user's highest power achieved while playing that country.</p>
   </div>
@@ -978,14 +979,7 @@ async function loginAccount(){
   await boot();
 }
 async function logoutAccount(){
-  if(ACCOUNT&&S){
-    saveDirty=true;
-    const saved=await flushServerSave(false,true);
-    if(!saved){
-      toast('Logout paused','Your latest progress has not been saved. Try again or reload before logging out.','bad');
-      return;
-    }
-  }
+  if(ACCOUNT)await flushServerSave(false,true);
   await supabaseClient.auth.signOut();showAuth();authMessage('Logged out.');
 }
 supabaseClient.auth.onAuthStateChange((event,session)=>{
@@ -2408,13 +2402,89 @@ function defaultMeta(){return{
   commanderName:'Commander'
 };}
 let META=defaultMeta();
+const LOCAL_GAME_MODE=true;
+function localSaveKey(){
+  const id=ACCOUNT&&ACCOUNT.userId?ACCOUNT.userId:'guest';
+  return 'iron-mandate-local-v1:'+id;
+}
+function loadLocalGame(){
+  try{
+    const raw=localStorage.getItem(localSaveKey());
+    return raw?JSON.parse(raw):null;
+  }catch(_error){
+    return null;
+  }
+}
+function writeLocalGame(){
+  if(!ACCOUNT)return false;
+  try{
+    localStorage.setItem(localSaveKey(),JSON.stringify({
+      v:1,
+      savedAt:Date.now(),
+      S:S?copyJson(S):null,
+      META:copyJson(META)
+    }));
+    return true;
+  }catch(error){
+    toast('Local save failed',error&&error.message?error.message:'Browser storage is unavailable.','bad');
+    return false;
+  }
+}
+function deleteLocalGame(){
+  try{localStorage.removeItem(localSaveKey());}catch(_error){}
+}
 function shopLvl(id){return META.shop[id]||0;}
 function shopCostExact(item,level){
   return Math.floor(Number(item.cost(Math.max(0,Math.floor(Number(level)||0))))||0);
 }
 function conqCount(){return S?Object.keys(S.conq).length:0;}
-function newRun(){
-  throw new Error('A campaign must be started from the command screen.');
+function newRun(country,doctrines={}){
+  const now=Date.now();
+  const poke={
+    balls:3,bought:0,owned:{},team:[],seen:{},shards:0,evo:{},
+    megaStones:0,mega:{},activeMega:null,megaCooldownUntil:0,
+    zCrystals:0,zActiveUntil:0,zCooldownUntil:0,
+    dmaxBand:false,dmaxEnergy:0,activeDmax:null,dmaxCooldownUntil:0,
+    raidCooldown:0,raidWins:0,teraOrb:false,teraShards:0,teraTypes:{},
+    activeTera:null,teraCooldownUntil:0,battlePoints:0,worldRank:0,
+    champStreak:0,champWins:{},training:{},eggs:[],eggsHatched:0,
+    traits:{},shiny:{},rivalWins:{},rivalStreak:0,specialForms:{},
+    zygardeCells:0,trials:{},legendProgress:{}
+  };
+  const state={
+    v:1,startCode:country,startedAt:now,lastTs:now,playSec:0,
+    plane:'earth',speed:1,buyN:1,hint:0,stormCd:0,tAcc:0,evT:60,
+    raidT:25,auto:false,
+    ch:{
+      nocas:!!doctrines.nocas,
+      speed:!!doctrines.speed,
+      tiny:!!doctrines.tiny,
+      megaZygarde:!!META.megaZygardePending
+    },
+    chFail:{},
+    mp:0,gold:20+10000*shopLvl('aura'),equip:0,qi:0,mana:0,
+    clicks:0,
+    b:{off:0,bar:0,civ:0,mil:0,clone:0,orb:0,reactor:0,aca:0,well:0,shrine:0},
+    tech:{},disc:null,law:'vol',pacts:{},
+    tr:{snip:0,armor:0,navy:0,air:0,sf:0,storm:0,droid:0,jedi:0,fighter:0,destroyer:0,sith:0,cloneTrooper:0,mando:0,walker:0,frigate:0,battlecruiser:0,dreadnought:0},
+    conq:{[country]:1},hp:{},pc:{},rc:{},rebels:{},badges:{},
+    target:null,realm:0,renown:0,tension:0,won:false,
+    spells:{fire:0,shield:0,mind:0,summon:0,anchor:0,transmute:0,warpath:0},
+    shieldUntil:0,summonUntil:0,anchorUntil:0,warpath:false,
+    gens:[],gid:1,cmd:null,summons:{h:0,m:0},riskW:{},
+    infLvl:0,infT:90,poke,
+    st:{mpRec:0,goldE:0,trained:0,aged:0,won:0,cas:0,atk:0,dmg:0,gensLost:0}
+  };
+  if(META.megaZygardePending){
+    META.megaZygardePending=0;
+    state.ch.nocas=true;
+    state.ch.tiny=true;
+  }
+  const veterans=Math.min(5,shopLvl('veteran'));
+  S=state;
+  for(let i=0;i<veterans;i++)S.gens.push(makeGeneral(1));
+  repairPlaneCompletionState();
+  return state;
 }
 
 
@@ -3473,65 +3543,160 @@ async function flushServerActionQueue(){
   }
 }
 
-function runServerAction(type,payload={},quiet=false){
-  if(!ACCOUNT||!S||saveConflict)return Promise.resolve(null);
-  invalidatePrestigePreview();
-  lastGameplayInputAt=Date.now();
-  if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
+function localActionResult(type,payload={}){
+  if(!S)return null;
 
-  // Automatic siege/world pulses are coalesced so a slow connection cannot
-  // create a large queue of obsolete timer actions.
-  if(type==='attack'&&payload&&payload.mode==='siege'){
-    const siegeCode=String(payload.code||S.target||'');
-    if(hasPendingServerAction('attack','siege',siegeCode))return Promise.resolve(null);
+  if(type==='combat-intent'||type==='world-pulse'){
+    return{type};
   }
   if(type==='combat-complete'){
     const code=String(payload.code||'');
-    if(hasPendingServerAction('combat-complete','',code))return Promise.resolve(null);
+    const country=BY[code];
+    if(country&&!S.conq[code])applyLocalConquest(code);
+    repairPlaneCompletionState();
+    return{type,code,planeCleared:country&&planeClearedId(country.plane||'earth')?(country.plane||'earth'):null};
   }
-  if(type==='world-pulse'&&hasPendingServerAction('world-pulse')){
+  if(type==='attack'){
+    return{type,code:String(payload.code||S.target||'')};
+  }
+  if(type==='recruit-general'){
+    const mode=String(payload.mode||'standard');
+    const rarity=mode==='mythic'?4:(mode==='heroic'?Math.max(2,rollRarity(3)):rollRarity());
+    const general=makeGeneral(rarity);
+    S.gens.push(general);
+    noteGen(general);
+    return{type,general};
+  }
+  if(type==='poke-catch'){
+    const id=String(payload.id||''),p=POKEMON.find(x=>x.id===id);
+    if(!p||S.poke.balls<1)return null;
+    S.poke.balls--;
+    const caught=Math.random()<catchChance(p);
+    S.poke.seen[id]=1;
+    if(caught){
+      S.poke.owned[id]=Math.max(0,Number(S.poke.owned[id])||0)+1;
+      if(S.poke.team.length<6&&!S.poke.team.includes(id))S.poke.team.push(id);
+      S.poke.shards+=Math.max(1,Math.floor((p.pow||0.1)*15));
+    }
+    return{type,id,caught};
+  }
+  if(type==='poke-legend'){
+    const id=String(payload.id||''),l=legendDef(id);
+    if(!l||!legendUnlocked(l))return null;
+    const phase=legendPhase(id),conditions=legendConditions(l,phase);
+    if(!conditions.ok)return null;
+    S.poke.shards-=conditions.sc;
+    S.poke.balls-=conditions.bc;
+    S.poke.legendProgress[id]=phase+1;
+    const captured=phase+1>=3;
+    if(captured)captureLegend(l);
+    return{type,id,phase:phase+1,captured};
+  }
+  if(type==='poke-rival'){
+    const id=String(payload.id||''),r=RIVAL_TEAMS.find(x=>x.id===id);
+    if(!r||trainerRating()<rivalReq(r)||pokemonMastery()<rivalMasteryReq(r))return null;
+    S.poke.rivalWins[id]=rivalWins(id)+1;
+    S.poke.rivalStreak=(S.poke.rivalStreak||0)+1;
+    const reward=Math.floor(r.reward*(1+rivalWins(id)*.08));
+    S.poke.battlePoints+=reward;
+    addZygardeCells(r.cells,r.n);
+    return{type,id,reward,cells:r.cells};
+  }
+  if(type==='poke-special'){
+    const id=String(payload.id||''),x=SPECIAL_FORMS.find(v=>v.id===id);
+    if(!x||!specialUnlocked(x)||trainerRating()<x.req||
+       S.poke.battlePoints<x.costBP||S.poke.shards<x.costShards)return null;
+    S.poke.battlePoints-=x.costBP;
+    S.poke.shards-=x.costShards;
+    S.poke.specialForms[id]=1;
+    return{type,id};
+  }
+  if(type==='poke-championship'){
+    const id=String(payload.id||'world'),rank=Math.max(0,Number(S.poke.worldRank)||0);
+    const reward=Math.floor(350*Math.pow(1.18,rank));
+    S.poke.battlePoints+=reward;
+    S.poke.worldRank=rank+1;
+    S.poke.champStreak=(S.poke.champStreak||0)+1;
+    S.poke.champWins[id]=(S.poke.champWins[id]||0)+1;
+    return{type,id,reward,rank:S.poke.worldRank};
+  }
+  if(type==='poke-breed'){
+    const ids=Array.isArray(payload.ids)?payload.ids.map(String):[];
+    if(ids.length<2||S.gold<breedingCost())return null;
+    S.gold-=breedingCost();
+    S.poke.eggs.push({id:crypto.randomUUID(),parents:ids,readyAt:Date.now()+60000});
+    return{type};
+  }
+  if(type==='poke-hatch'){
+    const eggId=String(payload.id||'');
+    const index=S.poke.eggs.findIndex(e=>String(e.id)===eggId);
+    if(index<0||Number(S.poke.eggs[index].readyAt)>Date.now())return null;
+    const egg=S.poke.eggs.splice(index,1)[0];
+    const pool=(egg.parents||[]).filter(id=>POKEMON.some(p=>p.id===id));
+    const id=pool.length?pick(pool):pick(POKEMON.filter(p=>!p.legend).map(p=>p.id));
+    S.poke.owned[id]=Math.max(0,Number(S.poke.owned[id])||0)+1;
+    S.poke.eggsHatched=(S.poke.eggsHatched||0)+1;
+    return{type,id};
+  }
+  if(type==='poke-raid'){
+    if(!S.poke.dmaxBand||Date.now()<Number(S.poke.raidCooldown||0))return null;
+    const reward=Math.floor(120*(1+raidStars())*(hasLegend('eternatus')?1.35:1));
+    S.poke.battlePoints+=reward;
+    S.poke.dmaxEnergy+=1;
+    S.poke.raidWins+=1;
+    S.poke.raidCooldown=Date.now()+45000;
+    return{type,reward};
+  }
+  if(type==='poke-trial'){
+    const id=String(payload.id||''),trial=PTRIALS.find(t=>t.id===id);
+    if(!trial||!trialUnlocked(trial)||trainerRating()<trialRatingReq(trial)||
+       pokemonMastery()<trialMasteryReq(trial))return null;
+    S.poke.trials[id]=1;
+    if(trial.badge)S.badges[trial.badge]=1;
+    S.poke.shards+=Math.max(20,Math.floor(trialRatingReq(trial)/100));
+    return{type,id};
+  }
+
+  return{type};
+}
+
+function runServerAction(type,payload={},quiet=false){
+  if(!ACCOUNT||!S)return Promise.resolve(null);
+  invalidatePrestigePreview();
+  lastGameplayInputAt=Date.now();
+
+  const beforeS=copyJson(S);
+  const beforeMeta=copyJson(META);
+  const applied=applyOptimisticAction(type,payload);
+  let result=null;
+
+  if(applied){
+    result={type};
+    if(type==='recruit-general'){
+      // Cost was applied optimistically; generate the officer locally.
+      result=localActionResult(type,payload);
+    }
+  }else{
+    result=localActionResult(type,payload);
+  }
+
+  if(!result){
+    S=beforeS;
+    META=beforeMeta;
+    if(!quiet)toast('Order unavailable','The local requirements are not met.','bad');
+    refreshAfterActionBatch([type]);
     return Promise.resolve(null);
   }
 
-  if(pendingServerActionCount()>=SERVER_ACTION_QUEUE_MAX){
-    toast(
-      'Order queue full',
-      'Too many orders are pending. Your latest order was not added.',
-      'bad'
-    );
-    return Promise.resolve(null);
-  }
+  refreshOptimisticDisplay(type,payload);
+  refreshAfterActionBatch([type]);
+  save(true);
 
-  return new Promise(resolve=>{
-    if(!optimisticCanonicalS)captureOptimisticCanonical();
-
-    const command={
-      actionId:crypto.randomUUID(),
-      type,
-      payload,
-      quiet,
-      resolve,
-      optimisticApplied:false,
-      optimisticBefore:null,
-      expected:null,
-      targetIntentSeq:(type==='attack'||type==='set-target')?targetIntentSeq:0
-    };
-    applyOptimisticCommand(command);
-    if(CLIENT_VALIDATED_ACTIONS.has(type)&&!command.optimisticApplied){
-      if(!pendingServerActionCount())clearOptimisticCanonical();
-      resolve(null);
-      return;
-    }
-    serverActionQueue.push(command);
-
-    updateOptimisticQueueBadge();
-    if(command.optimisticApplied)refreshOptimisticDisplay(type,payload);
-
-    if(serverActionQueue.length>=SERVER_ACTION_BATCH_MAX){
-      scheduleServerActionFlush(0);
-    }else{
-      scheduleServerActionFlush();
-    }
+  return Promise.resolve({
+    local:true,
+    result,
+    actionId:crypto.randomUUID(),
+    competitiveEligible:false
   });
 }
 
@@ -3544,102 +3709,56 @@ function currentPreferences(){
     hint:S?Math.max(0,Math.floor(Number(S.hint)||0)):0
   };
 }
-function scheduleIdleSave(delay=IDLE_SAVE_DELAY_MS){
-  if(!ACCOUNT||saveConflict||!saveDirty)return;
+function scheduleIdleSave(delay=500){
+  if(!ACCOUNT)return;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
     saveTimer=null;
-    if(!ACCOUNT||saveConflict||!saveDirty)return;
-    const idleFor=Date.now()-lastGameplayInputAt;
-    if(actionBusy||serverActionSending||serverActionQueue.length||
-       idleFor<IDLE_SAVE_DELAY_MS){
-      scheduleIdleSave(Math.max(100,IDLE_SAVE_DELAY_MS-idleFor));
-      return;
-    }
     void flushServerSave(false,false);
   },Math.max(0,delay));
 }
 function save(markChanged=true){
-  if(!ACCOUNT||saveConflict)return;
+  if(!ACCOUNT)return;
   if(markChanged)stateVersion++;
   saveDirty=true;
   scheduleIdleSave();
 }
-async function flushServerSave(showToast,force=false){
-  if(!ACCOUNT||saveConflict)return false;
-  clearTimeout(saveTimer);saveTimer=null;
-  if(!force){
-    const idleFor=Date.now()-lastGameplayInputAt;
-    if(actionBusy||serverActionSending||serverActionQueue.length||
-       idleFor<IDLE_SAVE_DELAY_MS){
-      scheduleIdleSave(Math.max(100,IDLE_SAVE_DELAY_MS-idleFor));
-      return true;
-    }
-  }
-  if(actionBusy){
-    while(actionBusy)await new Promise(resolve=>setTimeout(resolve,40));
-  }
-  if(saveBusy){
-    while(saveBusy)await new Promise(resolve=>setTimeout(resolve,40));
-    if(saveDirty)return flushServerSave(showToast,force);
-    return !saveConflict;
-  }
-
-  saveBusy=true;let ok=true,resultPowerText='';
+async function submitLocalLeaderboard(){
+  if(!ACCOUNT||!S)return null;
   try{
-    while(saveDirty&&!saveConflict){
-      saveDirty=false;
-      const snapshotVersion=stateVersion;
-      const saveId=crypto.randomUUID();
-      const result=await gameApiWithRetry('save',{
-        revision:SERVER_REVISION,
-        saveId,
-        preferences:currentPreferences()
-      });
-      applyAuthoritativeEnvelope(result);
-      lastSavedVersion=Math.max(lastSavedVersion,snapshotVersion);
-      if(result.recordedPower!==undefined){
-        GLOBAL_BOARDS.loadedAt=0;
-        resultPowerText=fmt(Number(result.recordedPower)||0);
-      }
-    }
-
-    const status=$('serverStatus');
-    if(status){
-      const verified=resultPowerText?(' · power <b class="gold">'+resultPowerText+'</b>'):'';
-      status.innerHTML='💾 <span class="grn">Saved</span> as <b class="gold">'+ACCOUNT.username+'</b>'+verified+'.';
-    }
-    if(showToast)toast('💾 Saved','Progress saved.','grn');
-  }catch(error){
-    ok=false;
-    const status=$('serverStatus');
-
-    if(error&&error.status===409){
-      saveConflict=true;
-      saveDirty=false;
-      clearTimeout(saveTimer);
-      if(status)status.innerHTML='<span class="red">Progress conflict:</span> reload this page to use the canonical saved progress.';
-      toast('☁ Save conflict','This account changed in another tab or device. Reload before continuing so progress is not overwritten.','bad');
-      if(!$('modalWrap').classList.contains('hidden'))closeModal();
-      showModal('☁ SAVE CONFLICT',
-        '<p>Progress changed in another tab or device. Automatic saving has paused.</p>'+ 
-        '<p class="small" style="margin-top:8px">Reload this page to continue from the latest progress.</p>',
-        [{t:'Reload progress',fn:()=>location.reload()}]);
-    }else{
-      saveDirty=true;
-      if(status)status.innerHTML='<span class="red">Save failed:</span> '+htmlEscape(error.message);
-      if(showToast)toast('☁ Save failed',error.message,'bad');
-      else scheduleIdleSave(2500);
-    }
-  }finally{
-    saveBusy=false;
+    const result=await gameApiWithRetry('submit-local-leaderboard',{
+      revision:SERVER_REVISION,
+      requestId:crypto.randomUUID(),
+      country:String(S.startCode||''),
+      power:Math.max(0,Math.floor(armyPower())),
+      localMode:true
+    },{timeoutMs:7000});
+    SERVER_REVISION=Math.max(0,Number(result.revision)||SERVER_REVISION);
+    GLOBAL_BOARDS.loadedAt=0;
+    return result;
+  }catch(_error){
+    return null;
   }
+}
+async function flushServerSave(showToast,force=false){
+  clearTimeout(saveTimer);saveTimer=null;
+  const ok=writeLocalGame();
+  saveDirty=!ok;
+  lastSavedVersion=stateVersion;
 
-  if(ok&&saveDirty&&!saveConflict){
-    if(force)return flushServerSave(showToast,true);
-    scheduleIdleSave();
+  const status=$('serverStatus');
+  if(status){
+    status.innerHTML=ok
+      ?'💾 <span class="grn">Saved locally</span> · leaderboard <span class="gold">unverified</span>.'
+      :'<span class="red">Local save failed.</span>';
   }
-  return ok&&!saveConflict;
+  if(ok&&S)void submitLocalLeaderboard();
+  if(showToast){
+    toast(ok?'💾 Local save':'Save failed',
+      ok?'Progress saved in this browser.':'Browser storage could not be written.',
+      ok?'grn':'bad');
+  }
+  return ok;
 }
 
 /* ================= derived math ================= */
@@ -4649,31 +4768,12 @@ function ppCalc(){
   return local;
 }
 async function fetchPrestigePreview(force=false){
-  if(!ACCOUNT||!S)return null;
-  if(!force&&PRESTIGE_PREVIEW&&Date.now()-PRESTIGE_PREVIEW_AT<15000){
-    return PRESTIGE_PREVIEW;
-  }
-  if(PRESTIGE_PREVIEW_BUSY)return PRESTIGE_PREVIEW_BUSY;
-  const previewEpoch=RUNTIME_EPOCH;
-  PRESTIGE_PREVIEW_BUSY=(async()=>{
-    try{
-      const result=await gameApiWithRetry('prestige-preview',{
-        revision:SERVER_REVISION
-      },{timeoutMs:7000});
-      if(result&&result.preview&&previewEpoch===RUNTIME_EPOCH&&S){
-        PRESTIGE_PREVIEW=Object.assign({},result.preview);
-        PRESTIGE_PREVIEW_AT=Date.now();
-        if(ACTIVE_TAB==='prestige')updatePrestige();
-      }
-      return PRESTIGE_PREVIEW;
-    }catch(_error){
-      return null;
-    }finally{
-      PRESTIGE_PREVIEW_BUSY=null;
-    }
-  })();
-  return PRESTIGE_PREVIEW_BUSY;
+  if(!S)return null;
+  PRESTIGE_PREVIEW=ppCalcLocal();
+  PRESTIGE_PREVIEW_AT=Date.now();
+  return PRESTIGE_PREVIEW;
 }
+
 function makeSeed(){const r=ppCalc();
   return btoa(unescape(encodeURIComponent(JSON.stringify(
     {v:1,s:S.startCode,ch:S.ch,pp:r.pp,pl:Object.keys(S.pc).length,t:Math.floor(S.playSec)}))));}
@@ -4788,49 +4888,31 @@ async function doPrestige(){
     [{t:'Not yet'},{t:'Prestige',cls:'danger',fn:performPrestige}]);
 }
 async function claimPrestige(mode){
-  const button=$('prestigeBtn');
-  try{
-    if(button){
-      button.disabled=true;
-      button.textContent='Claiming…';
-    }
+  const r=ppCalcLocal();
+  if(r.pp<1)return;
 
-    // Gameplay actions already commit their own state. Wait for those orders,
-    // but do not perform the old redundant full-save request.
-    await waitForTransitionReady();
-
-    const requestId=crypto.randomUUID();
-    const result=await gameApiWithRetry('claim-prestige',{
-      revision:SERVER_REVISION,
-      requestId,
-      mode:mode||'standard'
-    },{timeoutMs:12000});
-
-    installBetweenCampaignState(result);
-    invalidatePrestigePreview();
-    showStart();
-
-    // Re-read canonical state without blocking the visible transition. This
-    // catches any database-side normalization and guarantees that the shop
-    // uses the same revision as the next purchase.
-    void refreshBetweenCampaignState();
-
-    toast(
-      mode==='gauntlet'
-        ?'🧬 ORDER GAUNTLET ARMED'
-        :'⭐ +'+fmt(Number(result.awardedPrestige)||0)+' Prestige',
-      mode==='gauntlet'
-        ?'Begin a new campaign. Tiny Army and Bloodless rules are mandatory; automation and battle transformations are forbidden.'
-        :'Your new Prestige Points are ready to spend.',
-      'grn'
-    );
-  }catch(error){
-    toast('Prestige rejected',error&&error.message?error.message:'The claim could not be completed.','bad');
-    if(button){
-      button.disabled=false;
-      updatePrestige();
-    }
+  const awarded=Math.max(0,Math.floor(r.pp));
+  META.pp=Math.max(0,Number(META.pp)||0)+awarded;
+  META.totPP=Math.max(0,Number(META.totPP)||0)+awarded;
+  META.prestiges=Math.max(0,Math.floor(Number(META.prestiges)||0))+1;
+  META.best=Math.max(Number(META.best)||0,awarded);
+  META.lifeWon=Math.max(0,Number(META.lifeWon)||0)+conqCount();
+  META.lifeCas=Math.max(0,Number(META.lifeCas)||0)+Math.max(0,Number(S.st&&S.st.cas)||0);
+  if(S.won){
+    META.wins=Math.max(0,Number(META.wins)||0)+1;
+    META.fastWin=!META.fastWin?S.playSec:Math.min(META.fastWin,S.playSec);
   }
+  if(mode==='gauntlet')META.megaZygardePending=1;
+
+  S=null;
+  resetRuntimeAfterPrestige();
+  writeLocalGame();
+  showStart();
+  toast(
+    mode==='gauntlet'?'🧬 ORDER GAUNTLET ARMED':'⭐ +'+fmt(awarded)+' Prestige',
+    'Prestige completed locally. Throne Sanctum upgrades are available immediately.',
+    'grn'
+  );
 }
 async function performPrestige(){await claimPrestige('standard');}
 
@@ -4858,56 +4940,16 @@ function enqueueMetaAction(task){
   return next;
 }
 async function buyShopWithoutCampaign(item){
-  return enqueueMetaAction(async()=>{
-    const level=Math.max(0,Math.floor(shopLvl(item.id)));
-    if(level>=item.max)throw new Error('Upgrade already maxed.');
-
-    const cost=shopCostExact(item,level);
-    if(optimisticNumber(META.pp)+1e-9<cost){
-      throw new Error('Not enough Prestige Points.');
-    }
-
-    const beforeMeta=copyJson(META);
-    const beforeRevision=SERVER_REVISION;
-
-    // Between campaigns there is no combat state to protect, so the shop can
-    // respond instantly and use the request only as confirmation.
-    META=copyJson(META);
-    META.shop=Object.assign({},META.shop||{});
-    META.pp=Math.max(0,optimisticNumber(META.pp)-cost);
-    META.shop[item.id]=level+1;
-    showStart();
-    sfx('buy');
-
-    try{
-      const requestId=crypto.randomUUID();
-      const result=await gameApiWithRetry('buy-shop',{
-        revision:beforeRevision,
-        requestId,
-        id:item.id
-      },{timeoutMs:8000});
-
-      SERVER_REVISION=Math.max(0,Number(result.revision)||beforeRevision);
-      const returnedMeta=result.state&&result.state.META;
-      META=Object.assign(defaultMeta(),copyJson(returnedMeta||META));
-      META.shop=META.shop&&typeof META.shop==='object'?META.shop:{};
-      META.ach=META.ach&&typeof META.ach==='object'?META.ach:{};
-      showStart();
-      return result;
-    }catch(error){
-      META=beforeMeta;
-      SERVER_REVISION=beforeRevision;
-      showStart();
-
-      const message=String(error&&error.message||'');
-      if(/unknown|not found|404/i.test(message)){
-        throw new Error(
-          'The updated game-api Edge Function is required for purchases between campaigns.'
-        );
-      }
-      throw error;
-    }
-  });
+  const level=Math.max(0,Math.floor(shopLvl(item.id)));
+  if(level>=item.max)throw new Error('Upgrade already maxed.');
+  const cost=shopCostExact(item,level);
+  if(Number(META.pp||0)<cost)throw new Error('Not enough Prestige Points.');
+  META.pp-=cost;
+  META.shop=Object.assign({},META.shop||{});
+  META.shop[item.id]=level+1;
+  writeLocalGame();
+  showStart();
+  return{local:true,result:{id:item.id,level:level+1,cost}};
 }
 async function buyShop(id){
   const item=SHOP.find(rule=>rule.id===String(id||''));
@@ -5750,20 +5792,18 @@ $('zIn').addEventListener('click',()=>zoomAt(1/1.35,VB.x+VB.w/2,VB.y+VB.h/2));
 $('zOut').addEventListener('click',()=>zoomAt(1.35,VB.x+VB.w/2,VB.y+VB.h/2));
 $('zReset').addEventListener('click',resetVB);
 $('hardResetBtn').addEventListener('click',()=>{
-  showModal('☠ DELETE ACCOUNT PROGRESS','<p>Erase the active run, all Prestige, upgrades, honors and record scores for this account. The login itself remains available.</p>',
-    [{t:'Keep my empire'},{t:'Erase progress',cls:'danger',fn:async()=>{try{
-      await waitForTransitionReady();
-      const requestId=crypto.randomUUID();
-      const result=await gameApiWithRetry('reset',{
-        revision:SERVER_REVISION,
-        requestId
-      });
-      installBetweenCampaignState(result);
+  showModal('☠ DELETE LOCAL PROGRESS',
+    '<p>Erase this browser\'s campaign, Prestige, upgrades, honors and local records. Your login and global leaderboard account remain.</p>',
+    [{t:'Keep my empire'},{t:'Erase local progress',cls:'danger',fn:async()=>{
+      deleteLocalGame();
+      resetRuntimeAfterPrestige();
+      META=defaultMeta();
+      S=null;
+      SERVER_REVISION=0;
       showStart();
-      toast('Account reset','All game progress and scores were deleted.','bad');
-    }catch(error){
-      toast('Reset failed',error&&error.message?error.message:'The reset could not be completed.','bad');
-    }}}]);});
+      toast('Local progress reset','This browser\'s game progress was deleted.','bad');
+    }}]);
+});
 async function renderStartLB(){
   $('lbStart').innerHTML='<p class="note">Loading global leaderboards…</p>';
   try{
@@ -5817,21 +5857,19 @@ $('startBtn').addEventListener('click',async()=>{
   const doctrines={nocas:$('chNocas').checked,speed:$('chSpeed').checked,tiny:$('chTiny').checked};
   $('startBtn').disabled=true;
   try{
-    await META_ACTION_CHAIN;
-    const requestId=crypto.randomUUID();
-    const result=await gameApiWithRetry('start-run',{
-      revision:SERVER_REVISION,
-      requestId,
-      country:code,
-      doctrines
-    });
     resetRuntimeAfterPrestige();
-    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||8;
-    PRESTIGE_PREVIEW=null;PRESTIGE_PREVIEW_AT=0;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
+    newRun(code,doctrines);
+    SERVER_REVISION=0;
+    AUTHORITY_PHASE=0;
+    SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
+    invalidatePrestigePreview();
+    writeLocalGame();
     enterGame();
-    const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.name+'. The server has opened a validated run.','grn');
-  }catch(error){toast('Campaign could not start',error.message,'bad');}
-  finally{$('startBtn').disabled=false;}
+    const h=CBY[code];
+    toast('🏴 Campaign begins','You hold '+h.name+'. This campaign runs locally.','grn');
+  }catch(error){
+    toast('Campaign could not start',error&&error.message?error.message:'Local campaign creation failed.','bad');
+  }finally{$('startBtn').disabled=false;}
 });
 function enterGame(){repairPlaneCompletionState();$('startScreen').classList.add('hidden');$('authScreen').classList.add('hidden');if($('commanderNameIn'))$('commanderNameIn').value=META.commanderName||'Commander';
   $('game').classList.remove('hidden');
@@ -5921,11 +5959,23 @@ async function boot(){
   let loaded;
   try{loaded=await gameApi('load');}
   catch(error){showAuth();authMessage(error.message,true);return;}
-  ACCOUNT={userId:sessionResult.data.session.user.id,username:loaded.username};SERVER_REVISION=loaded.revision||0;
-  AUTHORITY_PHASE=Number(loaded.authorityPhase)||0;
-  SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},loaded.rates||{});
+  ACCOUNT={userId:sessionResult.data.session.user.id,username:loaded.username};
+  SERVER_REVISION=loaded.revision||0;
+  AUTHORITY_PHASE=0;
+  SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
   saveConflict=false;saveDirty=false;stateVersion=0;lastSavedVersion=0;
-  const data=loaded.state||null;$('authScreen').classList.add('hidden');authMessage('');
+
+  const localData=loadLocalGame();
+  const data=localData
+    ?{S:localData.S||null,META:localData.META||defaultMeta()}
+    :loaded.state||null;
+  if(!localData&&data){
+    // One-time import of the current online save into local mode.
+    try{localStorage.setItem(localSaveKey(),JSON.stringify({
+      v:1,savedAt:Date.now(),S:data.S||null,META:data.META||defaultMeta()
+    }));}catch(_error){}
+  }
+  $('authScreen').classList.add('hidden');authMessage('');
   const loadedMeta=data&&data.META&&typeof data.META==='object'?data.META:{};
   META=Object.assign(defaultMeta(),loadedMeta);
   META.shop=META.shop&&typeof META.shop==='object'?META.shop:{};
@@ -5954,18 +6004,7 @@ async function boot(){
     repairPlaneCompletionState();
     if(!planeClearedId('pokemon')&&S.won)S.won=false;
     enterGame();
-    if(loaded.world)presentWorldResult({result:loaded.world});
-    const g=loaded.economyGain;
-    if(g&&Number(g.dt)>=60){
-      showModal('🕰️ OFFLINE GAINS',
-      '<p>'+timeFmt(Number(g.dt)||0)+' passed. Your empire prospered while you were away:</p>'+
-      '<div class="statgrid" style="margin-top:10px">'+
-      vst('Manpower','+'+fmt(g.mp))+vst('Gold','+'+fmt(g.gold))+
-      vst('Equipment','+'+fmt(g.eq))+(g.qi>0?vst('Qi','+'+fmt(g.qi)):'')+
-      (g.mana>0?vst('Mana','+'+fmt(g.mana)):'')+
-      (g.aged>0?vst('Veterans aged out','−'+fmt(g.aged)):'')+'</div>',
-      [{t:'Back to war'}]);
-    }
+
   }else{
     showStart();
     void refreshBetweenCampaignState();
