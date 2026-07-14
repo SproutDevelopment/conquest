@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IRON MANDATE — Pokémon World Step 19</title>
+<title>IRON MANDATE — Local Space Expansion</title>
 <style>
 :root{
   --bg:#0c0e0a; --panel:#141810; --raised:#1a2015; --sunken:#0f120c;
@@ -163,7 +163,12 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 .cc:hover{border-color:var(--line2)}
 .cc.target{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass)}
 .cc .hd{display:flex;align-items:center;gap:7px;cursor:pointer}
-.cc .flag{font-size:21px;line-height:1}
+.cc .flag,.country-flag{width:30px;height:21px;display:inline-flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;flex:none;border:1px solid var(--line2);border-radius:3px;
+  background:var(--sunken);font-family:var(--mono);font-size:8px;color:var(--faint);line-height:1}
+.country-flag.small{width:24px;height:17px;vertical-align:-4px;margin-right:4px}
+.country-flag img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.country-flag .flagfallback{position:relative;z-index:0;letter-spacing:.04em}
 .cc .nm{font-weight:700;font-size:13.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cc .tier{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.05em}
 .cc .bloc{font-size:9.5px;letter-spacing:.1em;color:var(--steel);border:1px solid var(--line);border-radius:3px;padding:1px 4px;margin-top:4px;display:inline-block}
@@ -834,7 +839,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authenticated server saves · global validated leaderboards</footer>
+  <footer>Country flag images: FlagCDN / Flagpedia.<br>IRON MANDATE · authenticated server saves · global validated leaderboards</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -960,7 +965,21 @@ function timeFmt(s){s=Math.floor(s);const h=Math.floor(s/3600),m=Math.floor(s%36
 const REGIONS=[['EU','Europe'],['AS','Asia'],['AF','Africa'],['AM','Americas'],['OC','Oceania']];
 const RNAME=Object.fromEntries(REGIONS);
 const BLOCS={AP:'Atlantic Pact',EC:'Eastern Coalition',PA:'Pacific Accord'};
-function C(code,name,flag,region,tier,pop,bloc){return{code,name,flag,region,tier,pop,bloc:bloc||null};}
+function countryFlagUrl(code){
+  return 'https://flagcdn.com/w80/'+String(code||'').toLowerCase()+'.png';
+}
+function countryFlagHtml(country,size){
+  if(!country)return'';
+  const code=String(country.code||'').toLowerCase();
+  const label=htmlEscape(country.name||code.toUpperCase());
+  return '<span class="country-flag'+(size==='small'?' small':'')+'" title="Flag of '+label+'">'+
+    '<span class="flagfallback">'+htmlEscape(code.toUpperCase())+'</span>'+
+    '<img src="'+countryFlagUrl(code)+'" alt="Flag of '+label+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'+
+    '</span>';
+}
+function C(code,name,flag,region,tier,pop,bloc){
+  return{code,name,flag:'',region,tier,pop,bloc:bloc||null};
+}
 const COUNTRIES=[
 // Europe
 C('va','Vatican City','🇻🇦','EU',0,0.0008),C('mc','Monaco','🇲🇨','EU',0,0.036),
@@ -1422,6 +1441,14 @@ const TECHS=[
  {id:'ai',ico:'🤖',n:'AI Drone Swarms',cost:5e9,t:'pow',v:5,d:'Army power ×5'},
  {id:'spirit',ico:'🔥',n:'Spirit-Tech Fusion',cost:4e10,t:'pow',v:6,needRealm:2,d:'Spirit-stone armor: army power ×6 (needs Foundation realm)'},
  {id:'warp',ico:'🛸',n:'Warp Logistics',cost:2.5e10,t:'pow',v:8,needPlane:'space',d:'Fold space around your fleets: army power ×8 (needs Solar Dominion)'},
+ {id:'cloneDoctrine',ico:'🧬',n:'Kaminoan Clone Doctrine',cost:7.5e10,t:'space',v:1.35,needPlane:'space',d:'Unlock Clone Troopers and increase all space formation power ×1.35.'},
+ {id:'beskar',ico:'◆',n:'Beskar Foundries',cost:2.5e11,t:'space',v:1.45,needPlane:'space',d:'Unlock Mandalorian Commandos and increase all space formation power ×1.45.'},
+ {id:'walkerLines',ico:'▣',n:'Walker Assembly Lines',cost:9e11,t:'space',v:1.55,needPlane:'space',d:'Unlock Imperial Walkers and increase all space formation power ×1.55.'},
+ {id:'frigateConst',ico:'◇',n:'Frigate Construction',cost:3.2e12,t:'space',v:1.65,needPlane:'space',d:'Unlock Rebel Frigates and increase all space formation power ×1.65.'},
+ {id:'battlecruiserDoctrine',ico:'⬡',n:'Battlecruiser Doctrine',cost:1.2e13,t:'space',v:1.8,needPlane:'space',d:'Unlock Battlecruisers and increase all space formation power ×1.8.'},
+ {id:'dreadnoughtSupremacy',ico:'◈',n:'Dreadnought Supremacy',cost:5e13,t:'space',v:2,needPlane:'space',d:'Unlock Galactic Dreadnoughts and increase all space formation power ×2.'},
+ {id:'fleetAI',ico:'AI',n:'Fleet Coordination AI',cost:2e14,t:'space',v:1.6,needPlane:'space',d:'All space formations coordinate as one fleet: space power ×1.6.'},
+ {id:'quantumShield',ico:'Q',n:'Quantum Shield Matrix',cost:8e14,t:'space',v:1.75,needPlane:'space',d:'Space formation power ×1.75 and casualties −20%.'},
  {id:'rune',ico:'🜏',n:'Rune Engines',cost:2.5e14,t:'pow',v:10,needPlane:'magic',d:'Warmachines etched in living runes: ×10 (needs Arcane Expanse)'},
  {id:'daoarm',ico:'⚔️',n:'Dao Armaments',cost:2e21,t:'pow',v:12,needPlane:'cult',d:'Blades that cut concepts: ×12 (needs Ascendant Peaks)'},
  {id:'sing',ico:'🕳️',n:'Singularity Core',cost:1e28,t:'pow',v:20,needPlane:'future',d:'A captive star-mind directs every shot: ×20 (needs Chrono Frontier)'}];
@@ -2104,7 +2131,7 @@ function newRun(code,ch){
     conq:{},hp:{},b:{off:0,bar:0,civ:0,mil:0,aca:0,well:0,shrine:0},
     tech:{},disc:null,realm:0,plane:'earth',pc:{},mana:0,spells:{fire:0,shield:0,mind:0,summon:0,anchor:0,transmute:0,warpath:0},shieldUntil:0,
     renown:0,speed:1,summons:{h:0,m:0},riskW:{},infT:90,infLvl:0,stormCd:0,
-    tr:{snip:0,armor:0,navy:0,air:0,sf:0},
+    tr:{snip:0,armor:0,navy:0,air:0,sf:0,storm:0,droid:0,jedi:0,fighter:0,destroyer:0,sith:0,clone:0,mando:0,walker:0,frigate:0,battlecruiser:0,dreadnought:0},
     summonUntil:0,anchorUntil:0,warpath:false,
     gens:[],gid:1,cmd:null,law:'vol',tension:0,pacts:{},
     auto:false,target:null,tAcc:0,evT:rand(40,75),raidT:25,
@@ -2210,6 +2237,7 @@ function goldMult(){let m=(1+0.25*shopLvl('warchest'))*lawM().g*prodMult()*(1+ec
   if(S.tech.prop)m*=1.3;if(hasLegend('groudon'))m*=1.25;return m;}
 function casMult(){let m=REALMS[S.realm].cas*(1-0.1*shopLvl('ancestor'))*(1-logiBonus());
   m*=1-0.4*Math.min(1,share('snip')*2.5);
+  if(S.tech.quantumShield)m*=0.8;
   for(const t of TECHS)if(t.t==='cas'&&S.tech[t.id])m*=t.v;if(hasLegend('lugia'))m*=0.78;if(hasLegend('zygarde'))m*=0.90;if(hasLegend('tapufini'))m*=0.86;if(S.poke.specialForms.armoredMewtwo)m*=0.85;if(megaZygardeActive())m*=0.25;return Math.max(0.01,m);}
 function techPow(){let m=1;for(const t of TECHS)if(t.t==='pow'&&S.tech[t.id])m*=t.v;return m;}
 function defRed(){let r=0;for(const t of TECHS)if(t.t==='def'&&S.tech[t.id])r+=t.v;if(hasLegend('giratina'))r+=0.08;if(hasLegend('zygarde'))r+=0.07;if(hasLegend('lunala'))r+=0.05;if(S.poke.specialForms.shadowLugia)r+=0.12;if(megaZygardeActive())r+=0.25;return Math.min(0.75,r);}
@@ -2229,14 +2257,62 @@ const BRANCHES=[
  {id:'air',ico:'✈️',n:'Air Force',w:2.5,g:8,e:5,req:'air',
   d:'Fight at ×2.5 power. Air superiority doubles siege/storm caps and halves the annihilation threshold at full share.'},
  {id:'sf',ico:'🥷',n:'Special Forces',w:2,g:10,e:6,req:'guard',
-  d:'Fight at ×2 power. Shadow escorts: commander death risk −50% at 10% share.'}];
-function trainedSum(){const t=S.tr;return t.snip+t.armor+t.navy+t.air+t.sf;}
+  d:'Fight at ×2 power. Shadow escorts: commander death risk −50% at 10% share.'},
+
+ {id:'storm',ico:'ST',n:'Storm Troopers',w:7,g:24,e:18,needPlane:'space',
+  d:'Space infantry fighting at ×7 power.'},
+ {id:'droid',ico:'BD',n:'Battle Droids',w:8,g:22,e:22,needPlane:'space',
+  d:'Mass-produced battle units fighting at ×8 power.'},
+ {id:'jedi',ico:'JK',n:'Jedi Knights',w:15,g:65,e:30,needPlane:'space',
+  d:'Elite force-sensitive commanders fighting at ×15 power.'},
+ {id:'fighter',ico:'SF',n:'Starfighters',w:20,g:80,e:55,needPlane:'space',
+  d:'Fast orbital attack craft fighting at ×20 power.'},
+ {id:'destroyer',ico:'SD',n:'Star Destroyers',w:42,g:210,e:170,needPlane:'space',
+  d:'Capital ships fighting at ×42 power.'},
+ {id:'sith',ico:'SM',n:'Sith Marauders',w:24,g:110,e:45,needPlane:'space',
+  d:'Aggressive elite assault formations fighting at ×24 power.'},
+
+ {id:'clone',ico:'CT',n:'Clone Troopers',w:10,g:35,e:24,needPlane:'space',req:'cloneDoctrine',
+  d:'Disciplined clone formations fighting at ×10 power.'},
+ {id:'mando',ico:'MC',n:'Mandalorian Commandos',w:18,g:85,e:58,needPlane:'space',req:'beskar',
+  d:'Beskar-equipped commandos fighting at ×18 power.'},
+ {id:'walker',ico:'IW',n:'Imperial Walkers',w:30,g:145,e:120,needPlane:'space',req:'walkerLines',
+  d:'Heavy planetary siege walkers fighting at ×30 power.'},
+ {id:'frigate',ico:'RF',n:'Rebel Frigates',w:36,g:175,e:145,needPlane:'space',req:'frigateConst',
+  d:'Flexible fleet escorts fighting at ×36 power.'},
+ {id:'battlecruiser',ico:'BC',n:'Battlecruisers',w:60,g:330,e:260,needPlane:'space',req:'battlecruiserDoctrine',
+  d:'Heavy fleet command ships fighting at ×60 power.'},
+ {id:'dreadnought',ico:'GD',n:'Galactic Dreadnoughts',w:110,g:700,e:560,needPlane:'space',req:'dreadnoughtSupremacy',
+  d:'The largest fleet formations, fighting at ×110 power.'}
+];
+const SPACE_BRANCH_IDS=new Set([
+  'storm','droid','jedi','fighter','destroyer','sith',
+  'clone','mando','walker','frigate','battlecruiser','dreadnought'
+]);
+function trainedSum(){
+  return BRANCHES.reduce((sum,b)=>sum+(Number(S.tr&&S.tr[b.id])||0),0);
+}
 function infantry(){return Math.max(0,S.mp-trainedSum());}
 function share(id){return S.mp>0?(S.tr[id]||0)/S.mp:0;}
+function spaceTechMult(){
+  let mult=1;
+  for(const tech of TECHS){
+    if(tech.t==='space'&&S.tech[tech.id])mult*=Number(tech.v)||1;
+  }
+  return mult;
+}
 function clampTrained(){const su=trainedSum();if(su<=S.mp)return;
   const f=S.mp>0?S.mp/su:0;for(const k in S.tr)S.tr[k]*=f;}
-function branchLocked(b){if(b.req&&!S.tech[b.req])return'Needs '+TECHS.find(t=>t.id===b.req).n;
-  if(b.reqConq&&conqCount()<b.reqConq)return'Needs '+b.reqConq+' territories';return null;}
+function branchLocked(b){
+  if(b.needPlane&&!planeUnlockedId(b.needPlane))
+    return'Needs the '+PLANES[planeIdx(b.needPlane)].n;
+  if(b.req&&!S.tech[b.req]){
+    const tech=TECHS.find(t=>t.id===b.req);
+    return'Needs '+(tech?tech.n:'required research');
+  }
+  if(b.reqConq&&conqCount()<b.reqConq)return'Needs '+b.reqConq+' territories';
+  return null;
+}
 function trainCostB(b,n){return{g:b.g*Math.pow(n,0.8),e:b.e*Math.pow(n,0.6)};}
 function trainBranch(id,frac){const b=BRANCHES.find(x=>x.id===id);
   if(!b||branchLocked(b))return;
@@ -2247,9 +2323,15 @@ function trainBranch(id,frac){const b=BRANCHES.find(x=>x.id===id);
   toast(b.ico+' '+b.n,fmt(n)+' soldiers complete '+b.n+' training.','grn');}
 function disbandBranch(id){S.tr[id]=0;}
 function annThresh(){return 250/(1+1.5*Math.min(1,share('air')));}
-function armyPower(){const t=S.tr;
-  const eff=infantry()+t.snip*1.5+t.navy*2+t.sf*2+t.air*2.5+t.armor*3;
-  const target=S.target?BY[S.target]:null;return eff*powAll()*pokeMultFor(target);}
+function armyPower(){const t=S.tr||{};
+  const normal=BRANCHES.reduce((sum,b)=>{
+    const count=Number(t[b.id])||0;
+    const branchPower=count*b.w;
+    return sum+(SPACE_BRANCH_IDS.has(b.id)?branchPower*spaceTechMult():branchPower);
+  },infantry());
+  const target=S.target?BY[S.target]:null;
+  return normal*powAll()*pokeMultFor(target);
+}
 function clickPow(){return (1+S.b.bar)*lawM().mp*(1+shopLvl('presence'))*(hasLegend('reshiram')?2:1)*(hasLegend('tapukoko')?1.3:1)*(S.ch.tiny?0.5:1);}
 function rates(){let mps=0,gps=0,eps=0,qps=0,mana=0;const now=Date.now();
   for(const c of COUNTRIES){if(!S.conq[c.code]||S.rebels[c.code]>now)continue;
@@ -2456,7 +2538,7 @@ function killGeneral(g,c){S.gens=S.gens.filter(x=>x.id!==g.id);
   if(S.cmd===g.id)S.cmd=null;S.st.gensLost++;sfx('death');
   showModal('⚰️ A GENERAL HAS FALLEN',
     '<p><b>'+g.title+' '+g.name+'</b> — '+RARITY[g.r].n+', level '+g.lvl+' — died leading the assault on <b>'+
-    (c?c.flag+' '+c.name:'the front')+'</b>.</p><p class="small" style="margin-top:8px">"'+g.bio+
+    (c?c.name:'the front')+'</b>.</p><p class="small" style="margin-top:8px">"'+g.bio+
     '"</p><p class="small" style="margin-top:8px">The dead do not return. Praetorian Guard research and higher realms lower this risk; striking far above your power raises it.</p>',
     [{t:'Honor the fallen'}]);
   renderGenerals();}
@@ -2560,7 +2642,7 @@ function fireEvent(){const rt=rates();const roll=Math.random();
   else if(roll<0.82){const held=COUNTRIES.filter(c=>S.conq[c.code]&&c.code!==S.startCode&&!(S.rebels[c.code]>Date.now()));
     if(held.length){const c=pick(held);const cost=Math.ceil(20*Math.pow(2.5,c.tier));
       showModal('🔥 REBELLION IN '+c.name.toUpperCase(),
-        '<p>'+c.flag+' Partisans rise against the occupation. Crush them now, or the province produces nothing for 75 seconds.</p>',
+        '<p>Partisans in <b>'+c.name+'</b> rise against the occupation. Crush them now, or the province produces nothing for 75 seconds.</p>',
         [{t:'Quell — '+fmt(cost)+' 🪖',fn:()=>{if(S.mp>=cost){S.mp-=cost;
             toast('🔥 Rebellion crushed',c.name+' is pacified.','');}
           else{S.rebels[c.code]=Date.now()+75000;toast('🔥 Not enough troops',c.name+' burns for 75 s.','bad');}
@@ -2580,7 +2662,7 @@ function tryRaid(){if(conqCount()<8||S.tension<25)return;
   let loss=Math.min(S.mp*0.18,90*Math.pow(3,c.tier))*casMult()*Math.pow(0.5,shopLvl('ironwill'));
   loss=Math.floor(loss);if(loss<1)return;
   S.mp-=loss;S.st.cas+=loss;META.lifeCas+=loss;
-  toast('🚨 BORDER RAID','Vengeful '+c.flag+' '+c.name+' strikes your lines — '+fmt(loss)+' soldiers lost. (Raids never void doctrines.)','bad');
+  toast('🚨 BORDER RAID','Vengeful forces from '+c.name+' strike your lines — '+fmt(loss)+' soldiers lost. (Raids never void doctrines.)','bad');
   sfx('death');}
 
 /* ================= offline ================= */
@@ -2744,7 +2826,7 @@ function buildMap(){const svg=$('worldMap');if(!svg||!S)return;svg.innerHTML='';
     if(c.code===S.startCode)svgEl(svg,'circle',{cx:xy[0],cy:xy[1],r:rr+3,class:'homering'});
     const m=svgEl(svg,'circle',{cx:xy[0],cy:xy[1],r:rr,class:'mk'});
     const t=document.createElementNS(SVGNS,'title');
-    t.textContent=c.flag+' '+c.name+' — T'+c.tier+' · def '+fmt(defOf(c));m.appendChild(t);
+    t.textContent=c.name+' — T'+c.tier+' · def '+fmt(defOf(c));m.appendChild(t);
     m.addEventListener('click',()=>{if(MDRAG.moved||!S||S.conq[c.code])return;
       if(S.target===c.code){S.target=null;refreshTargets();}else setSiege(c.code);});
     MREFS[c.code]=m;}
@@ -2781,14 +2863,14 @@ function buildGrid(){const g=$('grid');g.innerHTML='';CARDS={};
 function fillCard(code){const c=BY[code],R=CARDS[code],el=R.el;
   el.className='cc'+(S.conq[code]?' done':'');
   if(S.conq[code]){
-    el.innerHTML='<div class="hd"><span class="flag">'+c.flag+'</span><span class="nm">'+c.name+
+    el.innerHTML='<div class="hd">'+countryFlagHtml(c)+'<span class="nm">'+c.name+
       '</span><span class="tier">T'+c.tier+'</span></div>'+
       (code===S.startCode?'<span class="home">HOME</span>':'<span class="rebel hidden">REBELLION</span>')+
       '<div class="occ">■ OCCUPIED</div><div class="inc"></div>';
     R.rebel=el.querySelector('.rebel');R.inc=el.querySelector('.inc');
     R.bar=R.eff=R.cas=R.btn=null;
   }else{
-    el.innerHTML='<div class="hd" title="Set as auto-assault target"><span class="flag">'+c.flag+
+    el.innerHTML='<div class="hd" title="Set as auto-assault target">'+countryFlagHtml(c)+
       '</span><span class="nm">'+c.name+'</span><span class="tier">T'+c.tier+'</span></div>'+
       (c.bloc?'<span class="bloc">'+BLOCS[c.bloc]+'</span>':'')+
       (c.ptype?'<span class="ptype">'+PTYPES[c.ptype]+'</span>':'')+
@@ -2932,7 +3014,7 @@ function renderPacts(){const g=$('pactGrid');g.innerHTML='';PREFS={};
     d.innerHTML='<div class="hd"><span class="ico">🤝</span>'+BLOCS[b]+
       '<span class="lvl">'+alive.length+' standing</span></div><div class="ds">'+
       'Members reinforce each other: +22% defense per living ally (up to ×1.88). '+
-      (alive.length?('Standing: '+alive.slice(0,7).map(c=>c.flag).join(' ')+(alive.length>7?' …':''))
+      (alive.length?('Standing: '+alive.slice(0,7).map(c=>countryFlagHtml(c,'small')).join(' ')+(alive.length>7?' …':''))
         :'Bloc dissolved — every member is conquered.')+
       '</div><button class="buy"><span class="bl"></span><span class="c"></span></button>';
     d.querySelector('.buy').onclick=()=>signPact(b);
@@ -3080,10 +3162,10 @@ async function fetchGlobalBoards(force){
 }
 function playerBoardHTML(limit){const rows=GLOBAL_BOARDS.players.slice(0,limit||100);
   if(!rows.length)return'<p class="note">No online player power has been recorded yet.</p>';
-  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+htmlEscape(r.username)+'</div><div class="v">'+fmt(Number(r.best_power)||0)+' power <span class="small">('+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country||'—'))+')</span></div></div>';}).join('');}
+  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+htmlEscape(r.username)+'</div><div class="v">'+fmt(Number(r.best_power)||0)+' power <span class="small">('+(c?countryFlagHtml(c,'small')+htmlEscape(c.name):htmlEscape(r.country||'—'))+')</span></div></div>';}).join('');}
 function nationBoardHTML(limit){const rows=GLOBAL_BOARDS.nations.slice(0,limit||GLOBAL_BOARDS.nations.length);
   if(!rows.length)return'<p class="note">No country power has been recorded yet.</p>';
-  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country))+' · '+fmt(r.contributors)+' player'+(Number(r.contributors)===1?'':'s')+'</div><div class="v">'+fmt(Number(r.total_power)||0)+' power</div></div>';}).join('');}
+  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+(c?countryFlagHtml(c,'small')+htmlEscape(c.name):htmlEscape(r.country))+' · '+fmt(r.contributors)+' player'+(Number(r.contributors)===1?'':'s')+'</div><div class="v">'+fmt(Number(r.total_power)||0)+' power</div></div>';}).join('');}
 async function renderBoards(){
   $('lbPlayers').innerHTML='<p class="note">Loading global commanders…</p>';$('lbNations').innerHTML='';
   try{await fetchGlobalBoards(false);$('lbPlayers').innerHTML=playerBoardHTML(100);$('lbNations').innerHTML=nationBoardHTML(GLOBAL_BOARDS.nations.length);}
@@ -3289,7 +3371,7 @@ function buildCountrySel(){const sel=$('countrySel');sel.innerHTML='';
       .sort((a,b)=>a.tier-b.tier||a.name.localeCompare(b.name))
       .forEach(c=>{const o=document.createElement('option');o.value=c.code;
         const locked=c.tier>cap;o.disabled=locked;
-        o.textContent=(locked?'🔒 ':'')+c.flag+' '+c.name+' — T'+c.tier+
+        o.textContent=(locked?'[LOCKED] ':'')+c.name+' — T'+c.tier+
           (locked?' · unlocks at prestige '+tierUnlockAt(c.tier):'');
         og.appendChild(o);});
     sel.appendChild(og);}
@@ -3302,10 +3384,10 @@ $('playerName').addEventListener('change',()=>{void updateCommanderNameFrom($('p
 $('seedBtn').addEventListener('click',()=>{
   try{const d=JSON.parse(decodeURIComponent(escape(atob($('seedIn').value.trim()))));
     if(!d||!CBY[d.s])throw 0;
-    if(CBY[d.s].tier>startTierCap()){$('seedInfo').innerHTML='<span class="red">Their homeland ('+CBY[d.s].flag+' '+CBY[d.s].name+') is still locked for you — prestige more first.</span>';return;}
+    if(CBY[d.s].tier>startTierCap()){$('seedInfo').innerHTML='<span class="red">Their homeland ('+CBY[d.s].name+') is still locked for you — prestige more first.</span>';return;}
     $('countrySel').value=d.s;updateStartInfo();
     $('chNocas').checked=!!(d.ch&&d.ch.nocas);$('chSpeed').checked=!!(d.ch&&d.ch.speed);$('chTiny').checked=!!(d.ch&&d.ch.tiny);
-    $('seedInfo').innerHTML='⚔ Duel loaded: beat <b class="gold">'+fmt(d.pp)+' PP</b> from '+CBY[d.s].flag+' '+CBY[d.s].name+' ('+(d.pl||0)+' planes, '+timeFmt(d.t||0)+').';
+    $('seedInfo').innerHTML='⚔ Duel loaded: beat <b class="gold">'+fmt(d.pp)+' PP</b> from '+CBY[d.s].name+' ('+(d.pl||0)+' planes, '+timeFmt(d.t||0)+').';
   }catch(e){$('seedInfo').innerHTML='<span class="red">Not a valid campaign seed.</span>';}});
 $('startBtn').addEventListener('click',async()=>{
   const code=$('countrySel').value;
@@ -3316,14 +3398,14 @@ $('startBtn').addEventListener('click',async()=>{
     const result=await gameApi('start-run',{revision:SERVER_REVISION,country:code,doctrines,state:{S:candidate,META},leaderboardPower:0});
     SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;
     for(let i=0;i<shopLvl('veteran');i++)S.gens.push(makeGeneral(1));save();enterGame();
-    const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The server has opened a validated run.','grn');
+    const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.name+'. The campaign has begun.','grn');
   }catch(error){toast('Campaign could not start',error.message,'bad');}
   finally{$('startBtn').disabled=false;}
 });
 function enterGame(){$('startScreen').classList.add('hidden');$('authScreen').classList.add('hidden');if($('commanderNameIn'))$('commanderNameIn').value=META.commanderName||'Commander';
   $('game').classList.remove('hidden');
   const h=CBY[S.startCode];
-  $('runLbl').textContent=(META.commanderName||'Commander')+' · '+h.flag+' '+h.name+' · run #'+(META.prestiges+1)+
+  $('runLbl').textContent=(META.commanderName||'Commander')+' · '+h.name+' · run #'+(META.prestiges+1)+
     (S.ch.nocas?' · 🩸':'')+(S.ch.speed?' · ⚡':'')+(S.ch.tiny?' · 🪶':'');
   awakeShown=null;if(!S.plane)S.plane='earth';
   buildRegionTabs();renderPlaneRow();buildGrid();buildMap();initMapNav();resetVB();renderSpeed();renderBranches();renderLaw();renderBuyRow();renderBuildings();
@@ -3400,7 +3482,7 @@ async function boot(){
     if(S.speed===undefined)S.speed=1;S.stormCd=S.stormCd||0;
     S.infT=S.infT||90;S.infLvl=S.infLvl||0;
     S.summonUntil=S.summonUntil||0;S.anchorUntil=S.anchorUntil||0;
-    S.tr=Object.assign({snip:0,armor:0,navy:0,air:0,sf:0},S.tr||{});
+    S.tr=Object.assign({snip:0,armor:0,navy:0,air:0,sf:0,storm:0,droid:0,jedi:0,fighter:0,destroyer:0,sith:0,clone:0,mando:0,walker:0,frigate:0,battlecruiser:0,dreadnought:0},S.tr||{});
     S.warpath=!!S.warpath;
     S.spells=Object.assign({fire:0,shield:0,mind:0,summon:0,anchor:0,transmute:0,warpath:0},S.spells||{});
     S.spells=S.spells||{fire:0,shield:0,mind:0};S.shieldUntil=S.shieldUntil||0;
