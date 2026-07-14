@@ -1419,11 +1419,49 @@ const TERR=[];
 const ALLT=COUNTRIES.concat(TERR);
 const BY={};for(const t of ALLT)BY[t.code]=t;
 function planeTerrs(id){return id==='earth'?COUNTRIES:TERR.filter(t=>t.plane===id);}
-function planeClearedId(id){return planeTerrs(id).every(t=>S.conq[t.code]);}
+function planeClearedId(id){
+  if(!S||!S.conq)return false;
+  const territories=planeTerrs(id);
+  return territories.length>0&&territories.every(t=>S.conq[t.code]===1);
+}
+function repairPlaneCompletionState(){
+  if(!S)return[];
+  S.pc=S.pc&&typeof S.pc==='object'?S.pc:{};
+  const newlyCompleted=[];
+
+  for(const plane of PLANES){
+    const completed=planeClearedId(plane.id);
+    if(completed){
+      if(S.pc[plane.id]!==1)newlyCompleted.push(plane.id);
+      S.pc[plane.id]=1;
+    }else if(S.pc[plane.id]===1){
+      delete S.pc[plane.id];
+    }
+  }
+
+  return newlyCompleted;
+}
 function planeIdx(id){return PLANES.findIndex(p=>p.id===id);}
-function planeUnlockedId(id){const i=planeIdx(id);
-  return i<=0||!!(S.pc&&S.pc[PLANES[i-1].id]);}
-function planesUnlockedCount(){let n=1;for(let i=1;i<PLANES.length;i++)if(planeUnlockedId(PLANES[i].id))n++;return n;}
+function planeUnlockedId(id){
+  if(!S)return id==='earth';
+  repairPlaneCompletionState();
+  const i=planeIdx(id);
+  return i<=0||S.pc[PLANES[i-1].id]===1;
+}
+function nextPlaneId(id){
+  const index=planeIdx(id);
+  return index>=0&&index+1<PLANES.length?PLANES[index+1].id:null;
+}
+function planesUnlockedCount(){
+  if(!S)return 1;
+  repairPlaneCompletionState();
+  let n=1;
+  for(let i=1;i<PLANES.length;i++){
+    if(S.pc[PLANES[i-1].id]===1)n++;
+    else break;
+  }
+  return n;
+}
 function magicUnlocked(){return planeUnlockedId('magic');}
 function cultUnlocked(){return planeUnlockedId('cult');}
 function canSiege(c){if(!planeUnlockedId(c.plane||'earth'))return'Realm sealed';
@@ -2174,6 +2212,12 @@ function badgeCount(region){if(!S||!S.badges)return 0;return BADGES.filter(b=>(!
 function pokeTeam(){return POKEMON.filter(p=>S.poke&&S.poke.team&&S.poke.team.includes(p.id)&&S.poke.owned[p.id]);}
 
 const TERA_DURATION=45000,TERA_COOLDOWN=140000;
+const MEGA_DURATION=90000,MEGA_COOLDOWN=180000;
+const DMAX_DURATION=30000,DMAX_COOLDOWN=150000;
+const Z_DURATION=20000,Z_COOLDOWN=120000;
+function pokemonCooldownFactor(){
+  return Math.max(0.6,1-trainingLevel('cooldown')*0.02);
+}
 function teraRemaining(){return Math.max(0,((S&&S.poke&&S.poke.activeTera&&S.poke.activeTera.until)||0)-Date.now());}
 function teraCooldownRemaining(){return Math.max(0,((S&&S.poke&&S.poke.teraCooldownUntil)||0)-Date.now());}
 function teraActiveId(){const a=S&&S.poke&&S.poke.activeTera;return a&&a.until>Date.now()?a.id:null;}
@@ -2392,7 +2436,12 @@ function mergeAuthoritativeGameState(source){
     if(Object.prototype.hasOwnProperty.call(sourceStats,key))stats[key]=sourceStats[key];
   }
   merged.st=stats;
-  return merged;
+  const previousS=S;
+  S=merged;
+  repairPlaneCompletionState();
+  const repaired=S;
+  S=previousS;
+  return repaired;
 }
 function mergeAuthoritativeMetaState(source,base=META){
   const merged=copyJson(base||defaultMeta());
@@ -2685,6 +2734,125 @@ function applyOptimisticAction(type,payload){
     return true;
   }
 
+  if(type==='cast-spell'){
+    const id=String(payload.id||'');
+    const spell=SPELLS.find(item=>item.id===id);
+    if(!spell||!magicUnlocked())return false;
+    const cost=spellCost(spell);
+    if(optimisticNumber(S.mana)+1e-9<cost)return false;
+
+    const target=String(S.target||'');
+    const country=BY[target];
+    if((id==='fire'||id==='mind')&&(!country||S.conq[target]))return false;
+
+    S.mana=optimisticNumber(S.mana)-cost;
+    S.spells=optimisticObject(S.spells);
+    S.spells[id]=Math.max(0,Math.floor(optimisticNumber(S.spells[id])))+1;
+
+    const now=Date.now();
+    if(id==='shield')S.shieldUntil=now+60000;
+    else if(id==='summon')S.summonUntil=now+45000;
+    else if(id==='anchor')S.anchorUntil=now+120000;
+    else if(id==='warpath')S.warpath=true;
+    else if(id==='transmute'){
+      const gain=Math.floor(optimisticNumber(rates().gps)*150+500);
+      S.gold=optimisticNumber(S.gold)+gain;
+      S.st=optimisticObject(S.st);
+      S.st.goldE=optimisticNumber(S.st.goldE)+gain;
+    }else if(id==='mind'){
+      const current=Math.max(0,displayedDefenseRemaining(country));
+      S.hp=optimisticObject(S.hp);
+      S.hp[target]=current*0.8;
+      const combat=localCombat(target);
+      if(combat){
+        combat.remaining=Math.min(combat.remaining,S.hp[target]);
+        COMBAT_VISUAL_HP[target]=combat.remaining;
+      }
+    }else if(id==='fire'){
+      const info=effInfo(country);
+      const damage=Math.min(armyPowerFor(country)*25,info.ent*0.6);
+      const current=Math.max(0,displayedDefenseRemaining(country));
+      const multiplier=info.eff/Math.max(1e-12,current);
+      const remainingEffective=Math.max(0,info.eff-damage);
+      const remaining=remainingEffective/Math.max(1e-12,multiplier);
+      S.hp=optimisticObject(S.hp);
+      S.hp[target]=remaining;
+      const combat=localCombat(target);
+      if(combat){
+        combat.remaining=Math.min(combat.remaining,remaining);
+        COMBAT_VISUAL_HP[target]=combat.remaining;
+      }
+      if(remainingEffective<=0)applyLocalConquest(target);
+    }
+    return true;
+  }
+
+  if(type==='poke-activate-mega'){
+    const id=String(payload.id||'');
+    const pokemon=POKEMON.find(item=>item.id===id);
+    if(!pokemon||!canActivateMega(pokemon))return false;
+    const now=Date.now(),until=now+MEGA_DURATION;
+    S.poke.activeMega={id,until};
+    S.poke.megaCooldownUntil=until+Math.floor(MEGA_COOLDOWN*pokemonCooldownFactor());
+    return true;
+  }
+
+  if(type==='poke-activate-dmax'){
+    const id=String(payload.id||'');
+    const pokemon=POKEMON.find(item=>item.id===id);
+    if(!pokemon||!canDynamax(pokemon))return false;
+    const duration=DMAX_DURATION+(hasLegend('eternatus')?15000:0);
+    const until=Date.now()+duration;
+    S.poke.dmaxEnergy=Math.max(0,Math.floor(optimisticNumber(S.poke.dmaxEnergy))-1);
+    S.poke.activeDmax={id,until};
+    S.poke.dmaxCooldownUntil=until+Math.floor(DMAX_COOLDOWN*pokemonCooldownFactor());
+    return true;
+  }
+
+  if(type==='poke-activate-tera'){
+    const id=String(payload.id||'');
+    const pokemon=POKEMON.find(item=>item.id===id);
+    if(!pokemon||!canTerastalize(pokemon))return false;
+    const duration=hasLegend('terapagos')?65000:TERA_DURATION;
+    const until=Date.now()+duration;
+    S.poke.teraShards=Math.max(0,Math.floor(optimisticNumber(S.poke.teraShards))-1);
+    S.poke.activeTera={id,until};
+    S.poke.teraCooldownUntil=until+Math.floor(TERA_COOLDOWN*pokemonCooldownFactor());
+    return true;
+  }
+
+  if(type==='poke-activate-z'){
+    if(!S.poke||S.poke.zCrystals<1||!S.poke.team.length||
+       zActive()||zCooldownRemaining()>0||megaActiveId()||
+       dmaxActiveId()||teraActiveId())return false;
+    const duration=hasLegend('necrozma')?30000:Z_DURATION;
+    const until=Date.now()+duration;
+    S.poke.zCrystals=Math.max(0,Math.floor(optimisticNumber(S.poke.zCrystals))-1);
+    S.poke.zActiveUntil=until;
+    S.poke.zCooldownUntil=until+Math.floor(Z_COOLDOWN*pokemonCooldownFactor());
+    return true;
+  }
+
+  if(type==='resolve-rebellion'){
+    const event=S.serverAuth&&S.serverAuth.pendingEvent;
+    const eventId=String(payload.eventId||'');
+    if(!event||String(event.id||'')!==eventId)return false;
+    const choice=String(payload.choice||'');
+    const code=String(event.country||'');
+    const cost=Math.max(0,optimisticNumber(event.cost));
+    if(choice==='quell'&&optimisticNumber(S.mp)>=cost){
+      S.mp=optimisticNumber(S.mp)-cost;
+      clampTrained();
+    }else{
+      S.rebels=optimisticObject(S.rebels);
+      S.rebels[code]=Date.now()+75000;
+      S.tension=Math.min(100,optimisticNumber(S.tension)+3);
+    }
+    S.serverAuth=optimisticObject(S.serverAuth);
+    S.serverAuth.pendingEvent=null;
+    return true;
+  }
+
   if(type==='poke-buy-ball'){
     if(!pokemonUnlocked()||!S.poke)return false;
     const cost=ballCost();
@@ -2890,7 +3058,15 @@ function refreshOptimisticDisplay(type='',payload={}){
   }
 
   if(type==='buy-shop'){renderShop();updateStatics();return;}
-  if(type.startsWith('poke-')){renderPokemon();return;}
+  if(type==='cast-spell'){
+    updateTop();updateCards();renderSpells();updateStatics();return;
+  }
+  if(type==='resolve-rebellion'){
+    updateTop();updateCards();return;
+  }
+  if(type.startsWith('poke-')){
+    renderPokemon();updateStatics();return;
+  }
 }
 
 function rebuildOptimisticState(){
@@ -3945,6 +4121,7 @@ function applyLocalConquest(code){
   S.conq[code]=1;
   S.hp=optimisticObject(S.hp);
   delete S.hp[code];
+  repairPlaneCompletionState();
   COMBAT_VISUAL_HP[code]=0.000001;
 
   if(S.target===code){
@@ -4298,7 +4475,24 @@ function showCombatResult(envelope,quiet){
     toast('🏳️ '+c.name+' has fallen','Loot '+fmt(Number(r.loot)||0)+' gold · '+fmt(Number(r.recruits)||0)+' recruits rally to you','grn');
     sfx('conq');confettiAtCard(c.code);rebuildCard(c.code);renderPacts();updateRegionTabs();renderPlaneRow();
     if(r.regionCleared)toast('🌍 '+(r.regionName||r.regionCleared)+' UNIFIED','Regional command grants +10% army power and '+fmt(Number(r.regionBonus)||0)+' gold.','grn');
-    if(r.planeCleared)toast('🌀 '+String(r.planeCleared).toUpperCase()+' IS YOURS','A path to the next plane has opened.','cyan');
+    if(r.planeCleared){
+      repairPlaneCompletionState();
+      const next=nextPlaneId(String(r.planeCleared));
+      toast(
+        '🌀 '+String(r.planeCleared).toUpperCase()+' IS YOURS',
+        next?'The path to '+PLANES[planeIdx(next)].n+' has opened.':'The plane is fully conquered.',
+        'cyan'
+      );
+      if(next&&planeUnlockedId(next)){
+        S.plane=next;
+        renderPlaneRow();
+        buildGrid();
+        buildMap();
+        resetVB();
+        updateRegionTabs();
+        applyFilter();
+      }
+    }
     if(r.won)showVictory();
   }else if(!quiet&&r.damage>0)sfx('hit');
   if(r.conquered){
@@ -4513,6 +4707,19 @@ async function waitForTransitionReady(){
     throw new Error('Pending orders are still being processed.');
   }
 }
+function installBetweenCampaignState(result){
+  resetRuntimeAfterPrestige();
+  SERVER_REVISION=Math.max(0,Number(result&&result.revision)||0);
+  const returnedMeta=result&&result.state&&result.state.META;
+  META=Object.assign(defaultMeta(),copyJson(returnedMeta||META||{}));
+  META.shop=META.shop&&typeof META.shop==='object'?META.shop:{};
+  META.ach=META.ach&&typeof META.ach==='object'?META.ach:{};
+  S=null;
+  AUTHORITY_PHASE=0;
+  SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
+  META_ACTION_CHAIN=Promise.resolve();
+  GLOBAL_BOARDS.loadedAt=0;
+}
 function resetRuntimeAfterPrestige(){
   RUNTIME_EPOCH++;
   if(serverActionTimer){clearTimeout(serverActionTimer);serverActionTimer=null;}
@@ -4599,18 +4806,14 @@ async function claimPrestige(mode){
       mode:mode||'standard'
     },{timeoutMs:12000});
 
-    SERVER_REVISION=Number(result.revision);
-    META=copyJson(result.state&&result.state.META||META);
-    S=null;
-    GLOBAL_BOARDS.loadedAt=0;
-    PRESTIGE_PREVIEW=null;
-    PRESTIGE_PREVIEW_AT=0;
-
-    resetRuntimeAfterPrestige();
-    META_ACTION_CHAIN=Promise.resolve();
+    installBetweenCampaignState(result);
+    invalidatePrestigePreview();
     showStart();
-    renderShop();
-    updateShop();
+
+    // Re-read canonical state without blocking the visible transition. This
+    // catches any database-side normalization and guarantees that the shop
+    // uses the same revision as the next purchase.
+    void refreshBetweenCampaignState();
 
     toast(
       mode==='gauntlet'
@@ -4631,6 +4834,24 @@ async function claimPrestige(mode){
 }
 async function performPrestige(){await claimPrestige('standard');}
 
+async function refreshBetweenCampaignState(){
+  const epoch=RUNTIME_EPOCH;
+  try{
+    const loaded=await gameApiWithRetry('load',{},{
+      timeoutMs:8000
+    });
+    if(epoch!==RUNTIME_EPOCH||S)return null;
+    SERVER_REVISION=Math.max(0,Number(loaded.revision)||SERVER_REVISION);
+    const loadedMeta=loaded.state&&loaded.state.META;
+    META=Object.assign(defaultMeta(),copyJson(loadedMeta||META||{}));
+    META.shop=META.shop&&typeof META.shop==='object'?META.shop:{};
+    META.ach=META.ach&&typeof META.ach==='object'?META.ach:{};
+    showStart();
+    return loaded;
+  }catch(_error){
+    return null;
+  }
+}
 function enqueueMetaAction(task){
   const next=META_ACTION_CHAIN.then(task,task);
   META_ACTION_CHAIN=next.catch(()=>{});
@@ -4638,21 +4859,54 @@ function enqueueMetaAction(task){
 }
 async function buyShopWithoutCampaign(item){
   return enqueueMetaAction(async()=>{
-    const requestId=crypto.randomUUID();
-    const result=await gameApiWithRetry('buy-shop',{
-      revision:SERVER_REVISION,
-      requestId,
-      id:item.id
-    },{timeoutMs:8000});
+    const level=Math.max(0,Math.floor(shopLvl(item.id)));
+    if(level>=item.max)throw new Error('Upgrade already maxed.');
 
-    SERVER_REVISION=Number(result.revision);
-    META=copyJson(result.state&&result.state.META||META);
-    clearOptimisticCanonical();
-    renderShop();
-    updateShop();
-    updateStartInfo();
+    const cost=shopCostExact(item,level);
+    if(optimisticNumber(META.pp)+1e-9<cost){
+      throw new Error('Not enough Prestige Points.');
+    }
+
+    const beforeMeta=copyJson(META);
+    const beforeRevision=SERVER_REVISION;
+
+    // Between campaigns there is no combat state to protect, so the shop can
+    // respond instantly and use the request only as confirmation.
+    META=copyJson(META);
+    META.shop=Object.assign({},META.shop||{});
+    META.pp=Math.max(0,optimisticNumber(META.pp)-cost);
+    META.shop[item.id]=level+1;
     showStart();
-    return result;
+    sfx('buy');
+
+    try{
+      const requestId=crypto.randomUUID();
+      const result=await gameApiWithRetry('buy-shop',{
+        revision:beforeRevision,
+        requestId,
+        id:item.id
+      },{timeoutMs:8000});
+
+      SERVER_REVISION=Math.max(0,Number(result.revision)||beforeRevision);
+      const returnedMeta=result.state&&result.state.META;
+      META=Object.assign(defaultMeta(),copyJson(returnedMeta||META));
+      META.shop=META.shop&&typeof META.shop==='object'?META.shop:{};
+      META.ach=META.ach&&typeof META.ach==='object'?META.ach:{};
+      showStart();
+      return result;
+    }catch(error){
+      META=beforeMeta;
+      SERVER_REVISION=beforeRevision;
+      showStart();
+
+      const message=String(error&&error.message||'');
+      if(/unknown|not found|404/i.test(message)){
+        throw new Error(
+          'The updated game-api Edge Function is required for purchases between campaigns.'
+        );
+      }
+      throw error;
+    }
   });
 }
 async function buyShop(id){
@@ -4670,8 +4924,8 @@ async function buyShop(id){
       result=await buyShopWithoutCampaign(item);
     }else{
       result=await runServerAction('buy-shop',{id:item.id},true);
+      if(result)sfx('buy');
     }
-    if(result)sfx('buy');
   }catch(error){
     toast('Purchase failed',error&&error.message?error.message:'The upgrade could not be purchased.','bad');
     renderShop();
@@ -4904,7 +5158,10 @@ function updateMap(){if(!S)return;for(const code in MREFS)updateMapTerritory(cod
 
 /* ================= theatre grid ================= */
 let CARDS={},VIEW='ALL',Q='';
-function renderPlaneRow(){const w=$('planeRow');if(!w)return;w.innerHTML='';
+function renderPlaneRow(){const w=$('planeRow');if(!w||!S)return;
+  repairPlaneCompletionState();
+  if(!planeUnlockedId(S.plane||'earth'))S.plane='earth';
+  w.innerHTML='';
   for(const pl of PLANES){const b=document.createElement('button');
     const un=planeUnlockedId(pl.id);
     b.className='planebtn'+(S.plane===pl.id?' on':'')+(un?'':' lock');
@@ -5501,14 +5758,8 @@ $('hardResetBtn').addEventListener('click',()=>{
         revision:SERVER_REVISION,
         requestId
       });
-      resetRuntimeAfterPrestige();
-      SERVER_REVISION=Number(result.revision);
-      META=copyJson(result.state&&result.state.META||defaultMeta());
-      S=null;
-      GLOBAL_BOARDS.loadedAt=0;
+      installBetweenCampaignState(result);
       showStart();
-      renderShop();
-      updateShop();
       toast('Account reset','All game progress and scores were deleted.','bad');
     }catch(error){
       toast('Reset failed',error&&error.message?error.message:'The reset could not be completed.','bad');
@@ -5529,6 +5780,7 @@ async function renderStartLB(){
 function showStart(){$('game').classList.add('hidden');$('authScreen').classList.add('hidden');
   $('startScreen').classList.remove('hidden');
   buildCountrySel();updateStartInfo();checkAch();
+  renderShop();updateShop();
   $('playerName').value=META.commanderName||'Commander';void renderStartLB();
   $('metaLine').textContent='@'+(ACCOUNT?ACCOUNT.username:'—')+' · ⭐ '+fmt(META.pp)+' PP banked · '+META.prestiges+
     ' prestiges · best claim '+fmt(META.best)+' PP · homelands up to T'+startTierCap()+
@@ -5581,7 +5833,7 @@ $('startBtn').addEventListener('click',async()=>{
   }catch(error){toast('Campaign could not start',error.message,'bad');}
   finally{$('startBtn').disabled=false;}
 });
-function enterGame(){$('startScreen').classList.add('hidden');$('authScreen').classList.add('hidden');if($('commanderNameIn'))$('commanderNameIn').value=META.commanderName||'Commander';
+function enterGame(){repairPlaneCompletionState();$('startScreen').classList.add('hidden');$('authScreen').classList.add('hidden');if($('commanderNameIn'))$('commanderNameIn').value=META.commanderName||'Commander';
   $('game').classList.remove('hidden');
   const h=CBY[S.startCode];
   $('runLbl').textContent=(META.commanderName||'Commander')+' · '+h.name+' · run #'+(META.prestiges+1)+
@@ -5699,9 +5951,8 @@ async function boot(){
     S.spells=Object.assign({fire:0,shield:0,mind:0,summon:0,anchor:0,transmute:0,warpath:0},S.spells||{});
     S.spells=S.spells||{fire:0,shield:0,mind:0};S.shieldUntil=S.shieldUntil||0;
     if(!Array.isArray(S.gens))S.gens=[];
-    // Step 11 migration: earlier builds could mark the Pokémon plane and whole run complete.
-    // Reopen those flags until the newly-added Kalos territories are conquered.
-    if(!planeClearedId('pokemon')){delete S.pc.pokemon;if(S.won)S.won=false;}
+    repairPlaneCompletionState();
+    if(!planeClearedId('pokemon')&&S.won)S.won=false;
     enterGame();
     if(loaded.world)presentWorldResult({result:loaded.world});
     const g=loaded.economyGain;
@@ -5715,7 +5966,10 @@ async function boot(){
       (g.aged>0?vst('Veterans aged out','−'+fmt(g.aged)):'')+'</div>',
       [{t:'Back to war'}]);
     }
-  }else showStart();}
+  }else{
+    showStart();
+    void refreshBetweenCampaignState();
+  }}
 // Authority Phase 6 uses explicit action and preference saves only.
 // Save when the tab is backgrounded. Full save payloads deliberately avoid
 // fetch keepalive because browsers impose small keepalive body limits.
