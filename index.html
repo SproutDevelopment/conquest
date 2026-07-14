@@ -183,6 +183,12 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 .cc.done{background:linear-gradient(160deg,#16220f,#121a0d);border-color:#33502c}
 .cc.done .occ{font-size:10px;letter-spacing:.22em;color:var(--green-hi);font-weight:800;margin-top:6px}
 .cc.done .inc{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px}
+.cc.looting{background:linear-gradient(160deg,#241f0e,#17140b);border-color:var(--brass)}
+.cc.looting .loot-title{font-size:10px;letter-spacing:.2em;color:var(--brass-hi);font-weight:800;margin-top:7px}
+.cc.looting .loot-note{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:4px}
+.cc.looting .lootbar{height:7px;background:var(--sunken);border:1px solid var(--line2);border-radius:4px;overflow:hidden;margin-top:7px}
+.cc.looting .lootbar>i{display:block;height:100%;width:8%;background:linear-gradient(90deg,var(--brass),var(--brass-hi));transition:width .12s linear}
+.cc.looting .loot-percent{font-family:var(--mono);font-size:10px;color:var(--brass-hi);text-align:right;margin-top:3px}
 .cc .rebel{position:absolute;top:7px;right:8px;font-size:10px;color:var(--blood-hi);letter-spacing:.1em;font-weight:800;animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:.25}}
 .cc .home{position:absolute;top:7px;right:8px;font-size:10px;color:var(--brass);letter-spacing:.14em;font-weight:800}
@@ -842,7 +848,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authority phase 8.9 · full rollback and latency audit</footer>
+  <footer>IRON MANDATE · authority phase 8.10 · full rollback and latency audit</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -892,8 +898,8 @@ function showAuth(){
   serverActionActiveBatch=null;serverActionSending=false;
   clearTimeout(serverActionTimer);serverActionTimer=null;
   clearOptimisticCanonical();
-  PROVISIONAL_CONQUESTS={};
-  targetIntentSeq=0;targetIntentCode='';targetIntentPending=false;clearCombatVisual();
+  LOCAL_LOOTING={};targetIntentSeq=0;targetIntentCode='';targetIntentPending=false;
+  targetIntentKnown=false;clearCombatVisual();
   AUTHORITY_PHASE=0;SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
   stateVersion=0;lastSavedVersion=0;
   clearTimeout(saveTimer);saveTimer=null;
@@ -2505,8 +2511,7 @@ function applyOptimisticAction(type,payload){
   if(type==='attack'){
     const code=String(payload.code||S.target||'');
     const country=BY[code];
-    if(!country||(S.conq[code]&&!isProvisionalConquest(code))||
-       canSiege(country))return false;
+    if(!country||S.conq[code]||canSiege(country))return false;
     S.target=code;
     return true;
   }
@@ -2664,7 +2669,6 @@ function rebuildOptimisticState(){
     command.optimisticApplied=applyOptimisticAction(command.type,command.payload);
   }
 
-  restoreProvisionalConquests();
   updateOptimisticQueueBadge();
 }
 
@@ -2703,6 +2707,7 @@ function applyAuthoritativeEnvelope(result,batch=null){
   rebuildOptimisticState();
   restoreLatestTargetIntent(batch);
   reconcileCombatVisual();
+  reconcileLootingState();
 
   // Cover response transit so passive counters and the active siege do not
   // visibly step backwards between server processing and browser receipt.
@@ -2753,6 +2758,7 @@ function softConfirmEnvelope(result,batch=null){
   }
   restoreLatestTargetIntent(batch);
   reconcileCombatVisual();
+  reconcileLootingState();
 }
 
 const SERVER_ACTION_BATCH_MAX=20;
@@ -2956,11 +2962,7 @@ async function flushServerActionQueue(){
     }else if(status>=400&&status<500&&status!==429){
       serverActionActiveBatch=null;
       for(const command of batch.commands){
-        if(command.type==='attack'){
-          const code=String(command.payload&&command.payload.code||'');
-          clearCombatVisual(code);
-          clearProvisionalConquest(code,false);
-        }
+        if(command.type==='attack')clearCombatVisual(String(command.payload&&command.payload.code||''));
       }
       rollbackAndReplayOptimisticState();
       resolveFailedActionBatch(
@@ -3240,65 +3242,13 @@ function aliveAllies(c){if(!c.bloc)return 0;let n=0;
 function pactActive(b){return S.pacts[b]>Date.now();}
 function resFactor(){return Math.pow(1.022,Math.max(0,conqCount()-1));}
 let COMBAT_VISUAL_HP={};
-let PROVISIONAL_CONQUESTS={};
-let targetIntentSeq=0,targetIntentCode='',targetIntentPending=false;
-
-function isProvisionalConquest(code){
-  return !!PROVISIONAL_CONQUESTS[String(code||'')];
-}
-function canonicalHasConquest(code){
-  return !!(
-    optimisticCanonicalS&&optimisticCanonicalS.conq&&
-    optimisticCanonicalS.conq[code]
-  );
-}
-function restoreProvisionalConquests(){
-  if(!S)return;
-  S.conq=optimisticObject(S.conq);
-  S.hp=optimisticObject(S.hp);
-  for(const code of Object.keys(PROVISIONAL_CONQUESTS)){
-    if(canonicalHasConquest(code)){
-      delete PROVISIONAL_CONQUESTS[code];
-      continue;
-    }
-    S.conq[code]='pending';
-    S.hp[code]=0;
-    COMBAT_VISUAL_HP[code]=0;
-  }
-}
-function clearProvisionalConquest(code,confirmed=false){
-  code=String(code||'');
-  if(!code)return;
-  delete PROVISIONAL_CONQUESTS[code];
-  if(!confirmed&&!canonicalHasConquest(code)&&S){
-    if(S.conq)delete S.conq[code];
-    if(S.hp&&optimisticCanonicalS&&optimisticCanonicalS.hp&&
-       Object.prototype.hasOwnProperty.call(optimisticCanonicalS.hp,code)){
-      S.hp[code]=copyJson(optimisticCanonicalS.hp[code]);
-    }
-  }
-}
-function markProvisionalConquest(country){
-  if(!S||!country||canonicalHasConquest(country.code)||
-     isProvisionalConquest(country.code))return;
-  const code=country.code;
-  PROVISIONAL_CONQUESTS[code]={at:Date.now(),intent:targetIntentSeq};
-  S.conq=optimisticObject(S.conq);
-  S.hp=optimisticObject(S.hp);
-  S.conq[code]='pending';
-  S.hp[code]=0;
-  COMBAT_VISUAL_HP[code]=0;
-
-  toast('🏳️ '+country.name+' has fallen',
-    'The claim is immediate while Supabase finalizes rewards.','grn');
-  sfx('conq');confettiAtCard(code);
-  rebuildCard(code);updateMapTerritory(code);updateRegionTabs();updateTop();
-  queueSiegeHeartbeat(code,true);
-}
+let LOCAL_LOOTING={};
+let targetIntentSeq=0,targetIntentCode='',targetIntentPending=false,targetIntentKnown=false;
 function noteTargetIntent(code){
   targetIntentSeq+=1;
   targetIntentCode=String(code||'');
   targetIntentPending=true;
+  targetIntentKnown=true;
   return targetIntentSeq;
 }
 function batchTargetIntentSeq(batch){
@@ -3310,32 +3260,65 @@ function batchTargetIntentSeq(batch){
   return latest;
 }
 function restoreLatestTargetIntent(batch){
-  if(!S||!targetIntentPending)return;
+  if(!S||!targetIntentKnown)return;
+  const acknowledged=batchTargetIntentSeq(batch);
   const intended=targetIntentCode;
-
-  // The latest explicit player choice stays sticky across every older combat
-  // response, including responses arriving after its own target acknowledgement.
-  if(intended){
-    const confirmed=!!(
-      optimisticCanonicalS&&optimisticCanonicalS.conq&&
-      optimisticCanonicalS.conq[intended]
-    );
-    if(confirmed){
-      targetIntentPending=false;
-      targetIntentCode='';
-      if(String(S.target||'')===intended)S.target=null;
-      return;
-    }
-    S.target=intended;
+  if(intended&&((S.conq&&S.conq[intended])||LOCAL_LOOTING[intended])){
+    targetIntentCode='';
+    targetIntentPending=false;
+    S.target=null;
     return;
   }
-
-  S.target=null;
+  S.target=intended||null;
+  if(acknowledged>=targetIntentSeq)targetIntentPending=false;
+}
+function isLooting(code){return !!LOCAL_LOOTING[String(code||'')];}
+function lootingProgress(code,now=Date.now()){
+  const entry=LOCAL_LOOTING[code];if(!entry)return 0;
+  const elapsed=Math.max(0,now-Number(entry.startedAt||now));
+  return Math.min(94,8+86*(1-Math.exp(-elapsed/1500)));
+}
+function beginLooting(code){
+  code=String(code||'');const country=BY[code];
+  if(!country||S.conq[code])return false;
+  if(!LOCAL_LOOTING[code])LOCAL_LOOTING[code]={startedAt:Date.now(),heartbeatAt:0};
+  COMBAT_VISUAL_HP[code]=0.000001;
+  if(S.target===code){
+    targetIntentCode='';targetIntentPending=false;targetIntentKnown=true;S.target=null;
+  }
+  rebuildCard(code);updateMapTerritory(code);refreshTargets();updateRegionTabs();
+  return true;
+}
+function clearLooting(code){delete LOCAL_LOOTING[String(code||'')];}
+function reconcileLootingState(){
+  if(!S)return;
+  for(const code of Object.keys(LOCAL_LOOTING)){
+    if(S.conq[code]){clearLooting(code);clearCombatVisual(code);}
+  }
+}
+function updateLootingCard(code,now=Date.now()){
+  const R=CARDS[code];if(!R||!LOCAL_LOOTING[code])return;
+  const p=lootingProgress(code,now);
+  if(R.lootBar)R.lootBar.style.width=p.toFixed(1)+'%';
+  if(R.lootPercent)R.lootPercent.textContent=Math.floor(p)+'%';
+}
+function updateLootingVisuals(now=Date.now()){
+  for(const code of Object.keys(LOCAL_LOOTING)){
+    if(S&&S.conq[code]){
+      clearLooting(code);rebuildCard(code);updateMapTerritory(code);continue;
+    }
+    updateLootingCard(code,now);
+    const entry=LOCAL_LOOTING[code];
+    if(entry&&now-Number(entry.heartbeatAt||0)>=320&&!hasPendingServerAction('attack','siege',code)){
+      entry.heartbeatAt=now;queueSiegeHeartbeat(code,true);
+    }
+  }
 }
 function canonicalDefenseRemaining(c){
   return (S.hp[c.code]!==undefined)?Number(S.hp[c.code]):defOf(c);
 }
 function displayedDefenseRemaining(c){
+  if(isLooting(c.code))return 0.000001;
   const canonical=canonicalDefenseRemaining(c);
   if(S.target!==c.code||COMBAT_VISUAL_HP[c.code]===undefined)return canonical;
   return Math.min(canonical,Math.max(0.000001,Number(COMBAT_VISUAL_HP[c.code])||canonical));
@@ -3458,52 +3441,41 @@ function entrench(c,info){return defOf(c)*info.aF*info.fx*(info.rs||1)*(1-defRed
 let serverCombatAcc=0,autoTargetAt=0,localCombatPaintAcc=0;
 
 function predictLiveSiege(rawDt){
-  if(!S||!S.target||
-     (S.conq[S.target]&&!isProvisionalConquest(S.target))||
-     S.mp<1)return;
-  if(isProvisionalConquest(S.target))return;
-  const country=BY[S.target];
-  if(!country||canSiege(country))return;
-
-  const speed=[0,1,2,4].includes(Number(S.speed))?Number(S.speed):1;
-  if(speed<=0)return;
+  if(!S||!S.target||S.conq[S.target]||isLooting(S.target)||S.mp<1)return;
+  const country=BY[S.target];if(!country||canSiege(country))return;
+  const speed=[0,1,2,4].includes(Number(S.speed))?Number(S.speed):1;if(speed<=0)return;
   const dt=Math.max(0,rawDt)*speed;if(dt<=0)return;
-
   const info=effInfo(country),power=armyPower(),airShare=Math.min(1,share('air'));
-  const siegeBonus=1+0.2*shopLvl('timeworn');
   const damage=Math.min(
-    power*siegeRate()*siegeBonus*dt,
+    power*siegeRate()*(1+0.2*shopLvl('timeworn'))*dt,
     entrench(country,info)*0.08*(1+airShare)*dt
   );
   if(damage<=0||info.rem<=0)return;
-
   const multiplier=info.eff/Math.max(1e-12,info.rem);
-  const nextDefense=Math.max(
-    0,
-    info.rem-damage/Math.max(1e-12,multiplier)
-  );
-  COMBAT_VISUAL_HP[country.code]=nextDefense;
-  if(nextDefense<=0.000001)markProvisionalConquest(country);
-
-  // Casualties are applied once from the canonical response. Speculating
-  // them here made older attack responses visually cancel newer Mobilize clicks.
-
+  const next=Math.max(0,info.rem-damage/Math.max(1e-12,multiplier));
+  if(next<=Math.max(0.000001,defOf(country)*0.00015)){
+    COMBAT_VISUAL_HP[country.code]=0.000001;
+    beginLooting(country.code);
+    queueSiegeHeartbeat(country.code,true);
+    return;
+  }
+  COMBAT_VISUAL_HP[country.code]=next;
   localCombatPaintAcc+=Math.max(0,rawDt);
   if(localCombatPaintAcc>=0.05){
-    localCombatPaintAcc=0;
-    updateCard(country.code);
-    updateMapTerritory(country.code);
+    localCombatPaintAcc=0;updateCard(country.code);updateMapTerritory(country.code);
   }
 }
-
-function queueSiegeHeartbeat(code,force=false){
-  const provisional=isProvisionalConquest(code);
-  if(!code||!S||(!force&&S.target!==code)||
-     (S.conq[code]&&!provisional)||
-     hasPendingServerAction('attack','siege',code))return;
-
-  void runServerAction('attack',{mode:'siege',code},true).then(result=>{
+function queueSiegeHeartbeat(code,background=false){
+  code=String(code||'');
+  if(!code||!S||S.conq[code])return;
+  if(!background&&S.target!==code)return;
+  if(background&&!isLooting(code))return;
+  if(hasPendingServerAction('attack','siege',code))return;
+  void runServerAction('attack',{mode:'siege',code,background:!!background},true).then(result=>{
     if(result)showCombatResult(result,true);
+    if(isLooting(code)&&!S.conq[code]){
+      const entry=LOCAL_LOOTING[code];if(entry)entry.heartbeatAt=0;
+    }
   });
 }
 function removeQueuedSiegeOrders(keepCode=''){
@@ -3524,7 +3496,11 @@ function removeQueuedSiegeOrders(keepCode=''){
 
 function selectAttackTargetInstantly(code){
   const country=BY[code];
-  if(!country||(S.conq[code]&&!isProvisionalConquest(code)))return false;
+  if(!country||S.conq[code])return false;
+  if(isLooting(code)){
+    toast('📦 Looting '+country.name,'The territory is secured. Rewards are being verified.','');
+    return false;
+  }
   const gate=canSiege(country);
   if(gate){toast('🔒 '+country.name,gate,'bad');return false;}
 
@@ -3588,22 +3564,21 @@ function showCombatResult(envelope,quiet){
   if(r.promoted)toast('🎖️ Promotion',r.promoted.name+' reached level '+r.promoted.lvl+'.','grn');
   if(r.generalLost){sfx('death');showModal('⚰️ A GENERAL HAS FALLEN','<p><b>'+htmlEscape(r.generalLost.title+' '+r.generalLost.name)+'</b> died leading the assault.</p><p class="small" style="margin-top:8px">The server recorded this permanent loss.</p>',[{t:'Honor the fallen'}]);}
   if(r.conquered&&c){
-    clearProvisionalConquest(c.code,true);
-    if(targetIntentCode===c.code){
-      targetIntentPending=false;
-      targetIntentCode='';
-    }
+    clearLooting(r.code);
     toast('🏳️ '+c.name+' has fallen','Loot '+fmt(Number(r.loot)||0)+' gold · '+fmt(Number(r.recruits)||0)+' recruits rally to you','grn');
     sfx('conq');confettiAtCard(c.code);rebuildCard(c.code);renderPacts();updateRegionTabs();renderPlaneRow();
     if(r.regionCleared)toast('🌍 '+(r.regionName||r.regionCleared)+' UNIFIED','Regional command grants +10% army power and '+fmt(Number(r.regionBonus)||0)+' gold.','grn');
     if(r.planeCleared)toast('🌀 '+String(r.planeCleared).toUpperCase()+' IS YOURS','The next plane has been unlocked by the server.','cyan');
     if(r.won)showVictory();
   }else if(!quiet&&r.damage>0)sfx('hit');
+  if(!r.conquered&&r.code&&isLooting(r.code)){
+    const entry=LOCAL_LOOTING[r.code];if(entry)entry.heartbeatAt=0;
+    updateLootingCard(r.code);
+  }
   if(r.conquered){
     clearCombatVisual(r.code);
     refreshTargets();updateCards();updateMap();updateRegionTabs();updateTop();
   }else if(quiet&&r.code){
-    if(isProvisionalConquest(r.code))queueSiegeHeartbeat(r.code,true);
     restoreLatestTargetIntent(null);
     reconcileCombatVisual();
     updateCard(r.code);updateMapTerritory(r.code);
@@ -3623,21 +3598,18 @@ async function burst(code,quiet){
   if(result)showCombatResult(result,!!quiet);
 }
 function combatTick(dt){
-  if(AUTHORITY_PHASE<3||!S.target||
-     (S.conq[S.target]&&!isProvisionalConquest(S.target))||
-     S.mp<1)return;
+  if(AUTHORITY_PHASE<3||!S.target||S.conq[S.target]||S.mp<1)return;
   serverCombatAcc+=Math.max(0,dt);
-  const provisional=isProvisionalConquest(S.target);
-  if(serverCombatAcc<(provisional?0.2:0.5))return;
+  if(serverCombatAcc<0.5)return;
   const code=S.target;
   if(hasPendingServerAction('attack','siege',code))return;
   serverCombatAcc=0;
-  queueSiegeHeartbeat(code,provisional);
+  queueSiegeHeartbeat(code);
 }
 let combatFrameAt=performance.now();
 function combatVisualFrame(now){
   const dt=clamp((now-combatFrameAt)/1000,0,0.1);combatFrameAt=now;
-  if(S&&!document.hidden)predictLiveSiege(dt);
+  if(S&&!document.hidden){predictLiveSiege(dt);updateLootingVisuals(Date.now());}
   requestAnimationFrame(combatVisualFrame);
 }
 requestAnimationFrame(combatVisualFrame);
@@ -3979,20 +3951,21 @@ function buildMap(){const svg=$('worldMap');if(!svg||!S)return;svg.innerHTML='';
     const m=svgEl(svg,'circle',{cx:xy[0],cy:xy[1],r:rr,class:'mk'});
     const t=document.createElementNS(SVGNS,'title');
     t.textContent=c.flag+' '+c.name+' — T'+c.tier+' · def '+fmt(defOf(c));m.appendChild(t);
-    m.addEventListener('click',()=>{if(MDRAG.moved||!S||S.conq[c.code])return;
+    m.addEventListener('click',()=>{if(MDRAG.moved||!S||S.conq[c.code]||isLooting(c.code))return;
       void toggleSiege(c.code);});
     MREFS[c.code]=m;}
   updateMap();}
 function updateMapTerritory(code){
   if(!S)return;
   const m=MREFS[code],c=BY[code];if(!m||!c)return;
-  let fill='#6e7a63';const gated=!S.conq[code]&&!!canSiege(c);
+  let fill='#6e7a63';const gated=!S.conq[code]&&!isLooting(code)&&!!canSiege(c);
   if(S.conq[code])fill='#5a9e58';
+  else if(isLooting(code))fill='#c9a227';
   else if(gated)fill='#3a4133';
   else if(S.hp[code]!==undefined||COMBAT_VISUAL_HP[code]!==undefined||S.target===code)fill='#c0463c';
   m.setAttribute('fill',fill);
   m.classList.toggle('gated',gated);
-  m.classList.toggle('tg',S.target===code&&!S.conq[code]);
+  m.classList.toggle('tg',S.target===code&&!S.conq[code]&&!isLooting(code));
 }
 function updateMap(){if(!S)return;for(const code in MREFS)updateMapTerritory(code);}
 
@@ -4016,14 +3989,23 @@ function buildGrid(){const g=$('grid');g.innerHTML='';CARDS={};
   for(const c of list){const el=document.createElement('div');el.dataset.code=c.code;
     g.appendChild(el);CARDS[c.code]={el};fillCard(c.code);}}
 function fillCard(code){const c=BY[code],R=CARDS[code],el=R.el;
-  el.className='cc'+(S.conq[code]?' done':'');
+  const looting=isLooting(code);
+  el.className='cc'+(S.conq[code]?' done':looting?' looting':'');
   if(S.conq[code]){
     el.innerHTML='<div class="hd"><span class="flag">'+c.flag+'</span><span class="nm">'+c.name+
       '</span><span class="tier">T'+c.tier+'</span></div>'+
       (code===S.startCode?'<span class="home">HOME</span>':'<span class="rebel hidden">REBELLION</span>')+
       '<div class="occ">■ OCCUPIED</div><div class="inc"></div>';
     R.rebel=el.querySelector('.rebel');R.inc=el.querySelector('.inc');
-    R.bar=R.eff=R.cas=R.btn=null;
+    R.bar=R.eff=R.cas=R.btn=R.eta=R.lootBar=R.lootPercent=null;
+  }else if(looting){
+    el.innerHTML='<div class="hd"><span class="flag">'+c.flag+'</span><span class="nm">'+c.name+
+      '</span><span class="tier">T'+c.tier+'</span></div>'+
+      '<div class="loot-title">■ TERRITORY SECURED</div>'+
+      '<div class="loot-note">Looting · server calculating rewards</div>'+
+      '<div class="lootbar"><i></i></div><div class="loot-percent">8%</div>';
+    R.lootBar=el.querySelector('.lootbar i');R.lootPercent=el.querySelector('.loot-percent');
+    R.rebel=R.inc=R.bar=R.eff=R.cas=R.eta=R.btn=null;updateLootingCard(code);
   }else{
     el.innerHTML='<div class="hd" title="Set as auto-assault target"><span class="flag">'+c.flag+
       '</span><span class="nm">'+c.name+'</span><span class="tier">T'+c.tier+'</span></div>'+
@@ -4032,15 +4014,14 @@ function fillCard(code){const c=BY[code],R=CARDS[code],el=R.el;
       '<div class="bar"><i></i></div>'+
       '<div class="stats"><span class="eff"></span><span class="cas"></span><span class="eta"></span></div>'+
       '<button class="atk">⚔ Assault</button>';
-    R.bar=el.querySelector('.bar i');R.eff=el.querySelector('.eff');
-    R.cas=el.querySelector('.cas');R.eta=el.querySelector('.eta');
-    R.btn=el.querySelector('.atk');R.rebel=null;R.inc=null;
-    el.querySelector('.hd').onclick=()=>{void toggleSiege(code);};
-    R.btn.onclick=()=>burst(code);}
+    R.bar=el.querySelector('.bar i');R.eff=el.querySelector('.eff');R.cas=el.querySelector('.cas');
+    R.eta=el.querySelector('.eta');R.btn=el.querySelector('.atk');R.rebel=R.inc=null;
+    R.lootBar=R.lootPercent=null;
+    el.querySelector('.hd').onclick=()=>{void toggleSiege(code);};R.btn.onclick=()=>burst(code);}
   applyFilterOne(code);refreshTargets();}
 function rebuildCard(code){if(CARDS[code])fillCard(code);}
 function refreshTargets(){for(const k in CARDS)
-  CARDS[k].el.classList.toggle('target',!!S&&S.target===k&&!S.conq[k]);
+  CARDS[k].el.classList.toggle('target',!!S&&S.target===k&&!S.conq[k]&&!isLooting(k));
   updateMap();}
 function applyFilterOne(code){const c=BY[code];
   const ok=(S.plane!=='earth'||VIEW==='ALL'||c.region===VIEW)&&(!Q||c.name.toLowerCase().includes(Q));
@@ -4066,10 +4047,11 @@ function updateRegionTabs(){const w=$('regionTabs');if(!w.children.length)return
   $('regionMile').textContent=cl.length?('Unified: '+cl.join(', ')+' · +10% power each')
     :'Unify a whole region for +10% army power';}
 function weakestFoe(){let best=null,bv=Infinity;
-  for(const c of ALLT){if(S.conq[c.code]||canSiege(c))continue;
+  for(const c of ALLT){if(S.conq[c.code]||isLooting(c.code)||canSiege(c))continue;
     const e=effInfo(c).eff;if(e<bv){bv=e;best=c.code;}}return best;}
 function updateCard(code,now=Date.now()){
   const R=CARDS[code],c=BY[code];if(!R||!c)return;
+  if(isLooting(code)){updateLootingCard(code,now);return;}
   if(S.conq[code]){
     if(R.rebel)R.rebel.classList.toggle('hidden',!(S.rebels[code]>now));
     if(R.inc){const paused=S.rebels[code]>now;
