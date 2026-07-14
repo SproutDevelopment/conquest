@@ -3560,6 +3560,17 @@ function pauseLocalCombat(code){
   if(!combat||!combat.active)return;
   advanceLocalCombatTo(code);
   combat.active=false;
+
+  const country=BY[code];
+  if(country){
+    COMBAT_VISUAL_HP[code]=Math.max(
+      0.000001,
+      Number(combat.remaining)||canonicalDefenseRemaining(country)
+    );
+    updateCard(code);
+    updateMapTerritory(code);
+  }
+
   void runServerAction('combat-intent',{
     sessionId:combat.sessionId,
     code,
@@ -3690,16 +3701,36 @@ function canonicalDefenseRemaining(c){
 }
 function displayedDefenseRemaining(c){
   if(isLocalConquest(c.code))return 0.000001;
-  const predicted=localCombatRemaining(c.code);
-  if(predicted!==null&&S.target===c.code){
+
+  const canonical=canonicalDefenseRemaining(c);
+  const combat=localCombat(c.code);
+
+  if(combat){
+    const localRemaining=Math.max(
+      0.000001,
+      Number(combat.remaining)||canonical
+    );
+
     COMBAT_VISUAL_HP[c.code]=Math.min(
-      Number(COMBAT_VISUAL_HP[c.code])||canonicalDefenseRemaining(c),
-      predicted
+      canonical,
+      localRemaining,
+      Number(COMBAT_VISUAL_HP[c.code])||canonical
+    );
+
+    return COMBAT_VISUAL_HP[c.code];
+  }
+
+  if(COMBAT_VISUAL_HP[c.code]!==undefined){
+    return Math.min(
+      canonical,
+      Math.max(
+        0.000001,
+        Number(COMBAT_VISUAL_HP[c.code])||canonical
+      )
     );
   }
-  const canonical=canonicalDefenseRemaining(c);
-  if(S.target!==c.code||COMBAT_VISUAL_HP[c.code]===undefined)return canonical;
-  return Math.min(canonical,Math.max(0.000001,Number(COMBAT_VISUAL_HP[c.code])||canonical));
+
+  return canonical;
 }
 function clearCombatVisual(code){
   if(code)delete COMBAT_VISUAL_HP[code];
@@ -3707,7 +3738,13 @@ function clearCombatVisual(code){
 }
 function reconcileCombatVisual(){
   for(const code of Object.keys(COMBAT_VISUAL_HP)){
-    if(!S||S.target!==code||S.conq[code])delete COMBAT_VISUAL_HP[code];
+    if(!S||S.conq[code]){
+      delete COMBAT_VISUAL_HP[code];
+      continue;
+    }
+
+    const combat=localCombat(code);
+    if(!combat&&S.target!==code)delete COMBAT_VISUAL_HP[code];
   }
   if(!S||!S.target||S.conq[S.target])return;
   const c=BY[S.target];if(!c)return;
