@@ -1833,7 +1833,7 @@ const POKEDEX={
  zigzagoon:263,taillow:276,ralts:280,aron:304,electrike:309,numel:322,carvanha:318,trapinch:328,swablu:333,absol:359,bagon:371,treecko:252,torchic:255,mudkip:258,groudon:383,kyogre:382,rayquaza:384,
  starly:396,bidoof:399,shinx:403,budew:406,cranidos:408,drifloon:425,gible:443,riolu:447,snover:459,sneasel_h:215,turtwig:387,chimchar:390,piplup:393,dialga:483,palkia:484,giratina:487,
  patrat:504,lillipup:506,purrloin:509,munna:517,blitzle:522,roggenrola:524,drilbur:529,timburr:532,sandile:551,solosis:577,axew:610,snivy:495,tepig:498,oshawott:501,reshiram:643,zekrom:644,kyurem:646,
- fletchling:661,scatterbug:664,litleo:667,flabebe:669,skiddo:672,pancham:674,espurr:677,honedge:679,helioptile:694,tyrunt:696,amaura:698,goomy:704,chespin:650,fennekin:653,froakie:656,xerneas:716,yveltal:717,zygarde:718,pikipek:731,yungoos:734,grubbin:736,rockruff:744,mudbray:749,salandit:757,stufful:759,bounsweet:761,wimpod:767,mimikyu:778,jangmoo:782,rowlet:722,litten:725,popplio:728,tapukoko:785,tapulele:786,tapubulu:787,tapufini:788,solgaleo:791,lunala:792,necrozma:800,rookidee:821,wooloo:831,yamper:835,chewtle:833,sizzlipede:850,toxel:848,hatenna:856,impidimp:859,cufant:878,dreepy:885,grookey:810,scorbunny:813,sobble:816,lechonk:916,pawmi:922,smoliv:929,fidough:927,charcadet:936,tadbulb:939,wattrel:941,maschiff:943,tinkatink:958,finizen:964,frigibax:997,sprigatito:907,fuecoco:910,quaxly:913,zacian:888,zamazenta:889,eternatus:890,calyrex:898,urshifu:892,lechonk:915,pawmi:921,smoliv:928,fidough:926,charcadet:935,tadbulb:938,wattrel:940,maschiff:942,tinkatink:957,finizen:963,frigibax:996,sprigatito:906,fuecoco:909,quaxly:912,koraidon:1007,miraidon:1008,terapagos:1024
+ fletchling:661,scatterbug:664,litleo:667,flabebe:669,skiddo:672,pancham:674,espurr:677,honedge:679,helioptile:694,tyrunt:696,amaura:698,goomy:704,chespin:650,fennekin:653,froakie:656,xerneas:716,yveltal:717,zygarde:718,pikipek:731,yungoos:734,grubbin:736,rockruff:744,mudbray:749,salandit:757,stufful:759,bounsweet:761,wimpod:767,mimikyu:778,jangmoo:782,rowlet:722,litten:725,popplio:728,tapukoko:785,tapulele:786,tapubulu:787,tapufini:788,solgaleo:791,lunala:792,necrozma:800,rookidee:821,wooloo:831,yamper:835,chewtle:833,sizzlipede:850,toxel:848,hatenna:856,impidimp:859,cufant:878,dreepy:885,grookey:810,scorbunny:813,sobble:816,zacian:888,zamazenta:889,eternatus:890,calyrex:898,urshifu:892,lechonk:915,pawmi:921,smoliv:928,fidough:926,charcadet:935,tadbulb:938,wattrel:940,maschiff:942,tinkatink:957,finizen:963,frigibax:996,sprigatito:906,fuecoco:909,quaxly:912,koraidon:1007,miraidon:1008,terapagos:1024
 };
 const POKEEVODEX={
  pidgey:17,rattata:20,caterpie:12,pikachu:26,geodude:75,zubat:42,oddish:44,growlithe:59,gastly:93,abra:64,machop:67,dratini:148,eevee:134,
@@ -2229,6 +2229,16 @@ function megaFormReady(p){const ch=evoChain(p);return !!(p&&MEGA_FORMS[p.id]&&(!
 function canUnlockMega(p){return !!(megaFormReady(p)&&(S.poke.owned[p.id]||0)>=5&&!S.poke.mega[p.id]&&S.poke.megaStones>0);}
 function canActivateMega(p){return !!(megaFormReady(p)&&S.poke.mega[p.id]&&S.poke.team.includes(p.id)&&!megaActiveId()&&!dmaxActiveId()&&megaCooldownRemaining()<=0);}
 
+async function megaEvolve(id){
+  const p=POKEMON.find(item=>item.id===String(id||''));
+  if(!p||!canUnlockMega(p))return;
+  const result=await runServerAction('poke-mega-bond',{id:p.id},true);
+  if(result){
+    sfx('buy');
+    toast('💎 Mega Stone bonded',p.n+' can now Mega Evolve.','cyan');
+  }
+}
+
 async function activateMega(id){
   const result=await runServerAction('poke-activate-mega',{id},true);
   if(result&&result.result&&result.result.blocked){
@@ -2379,6 +2389,14 @@ function mergeAuthoritativeGameState(source){
     if(Object.prototype.hasOwnProperty.call(sourceStats,key))stats[key]=sourceStats[key];
   }
   merged.st=stats;
+  return merged;
+}
+function mergeAuthoritativeMetaState(source,base=META){
+  const merged=copyJson(base||defaultMeta());
+  if(!source||typeof source!=='object')return merged;
+  for(const key of AUTH_META_KEYS){
+    if(Object.prototype.hasOwnProperty.call(source,key))merged[key]=copyJson(source[key]);
+  }
   return merged;
 }
 function responseTransitSeconds(result){
@@ -2664,9 +2682,177 @@ function applyOptimisticAction(type,payload){
     return true;
   }
 
-  // Random combat, events, spells and Pokémon outcomes remain visibly queued
-  // but are not invented by the browser.
+  if(type==='poke-buy-ball'){
+    if(!pokemonUnlocked()||!S.poke)return false;
+    const cost=ballCost();
+    if(optimisticNumber(S.gold)+1e-9<cost)return false;
+    S.gold=optimisticNumber(S.gold)-cost;
+    S.poke.balls=Math.max(0,Math.floor(optimisticNumber(S.poke.balls)))+1;
+    S.poke.bought=Math.max(0,Math.floor(optimisticNumber(S.poke.bought)))+1;
+    return true;
+  }
+
+  if(type==='poke-toggle-team'){
+    const id=String(payload.id||'');
+    if(!S.poke||optimisticNumber(S.poke.owned&&S.poke.owned[id])<1)return false;
+    const team=Array.isArray(S.poke.team)?S.poke.team.slice():[];
+    const index=team.indexOf(id);
+    if(index>=0)team.splice(index,1);
+    else{
+      if(team.length>=6)return false;
+      team.push(id);
+    }
+    S.poke.team=team;
+    return true;
+  }
+
+  if(type==='poke-evolve'){
+    const id=String(payload.id||''),p=POKEMON.find(item=>item.id===id);
+    if(!p||!S.poke)return false;
+    const next=nextEvolution(p);
+    if(!next)return false;
+    const cost=evolutionCost(p,next);
+    if(optimisticNumber(S.poke.owned&&S.poke.owned[id])<Number(next.bond||3)||
+       optimisticNumber(S.poke.shards)+1e-9<cost)return false;
+    S.poke.shards=optimisticNumber(S.poke.shards)-cost;
+    S.poke.evo=optimisticObject(S.poke.evo);
+    S.poke.evo[id]=evoStage(id)+1;
+    return true;
+  }
+
+  if(type==='poke-training'){
+    const id=String(payload.id||''),item=TRAINING.find(rule=>rule.id===id);
+    if(!item||!S.poke)return false;
+    S.poke.training=optimisticObject(S.poke.training);
+    const level=Math.max(0,Math.floor(optimisticNumber(S.poke.training[id])));
+    if(level>=item.max)return false;
+    const cost=Math.floor(item.base*Math.pow(1.32,level));
+    if(optimisticNumber(S.poke.battlePoints)+1e-9<cost)return false;
+    S.poke.battlePoints=optimisticNumber(S.poke.battlePoints)-cost;
+    S.poke.training[id]=level+1;
+    return true;
+  }
+
+  if(type==='poke-mega-bond'){
+    const id=String(payload.id||''),p=POKEMON.find(item=>item.id===id);
+    if(!p||!S.poke||!canUnlockMega(p))return false;
+    S.poke.megaStones=Math.max(0,Math.floor(optimisticNumber(S.poke.megaStones))-1);
+    S.poke.mega=optimisticObject(S.poke.mega);
+    S.poke.mega[id]=1;
+    return true;
+  }
+
+  // Random combat, events, catches, battles and timed transformations are
+  // submitted immediately but are not invented by the browser.
   return false;
+}
+
+function optimisticBeforeSnapshot(type,payload={}){
+  const poke=S&&S.poke||{};
+  const id=String(payload&&payload.id||'');
+  return{
+    gold:optimisticNumber(S&&S.gold),
+    equip:optimisticNumber(S&&S.equip),
+    mp:optimisticNumber(S&&S.mp),
+    qi:optimisticNumber(S&&S.qi),
+    renown:optimisticNumber(S&&S.renown),
+    pp:optimisticNumber(META&&META.pp),
+    building:type==='buy-building'
+      ?optimisticNumber(S&&S.b&&S.b[id]):0,
+    branch:type==='train-branch'||type==='disband-branch'
+      ?optimisticNumber(S&&S.tr&&S.tr[id]):0,
+    realm:optimisticNumber(S&&S.realm),
+    shop:type==='buy-shop'
+      ?optimisticNumber(META&&META.shop&&META.shop[id]):0,
+    pokeBalls:optimisticNumber(poke.balls),
+    pokeBought:optimisticNumber(poke.bought),
+    pokeBattlePoints:optimisticNumber(poke.battlePoints),
+    pokeShards:optimisticNumber(poke.shards),
+    pokeStage:type==='poke-evolve'?evoStage(id):0,
+    pokeTraining:type==='poke-training'?trainingLevel(id):0,
+    pokeTeam:Array.isArray(poke.team)?poke.team.slice():[],
+    pokeMegaStones:optimisticNumber(poke.megaStones),
+    pokeMegaBonded:optimisticNumber(poke.mega&&poke.mega[id])
+  };
+}
+function recordOptimisticExpectation(command){
+  command.expected=null;
+  if(!command.optimisticApplied)return;
+  const type=command.type,payload=command.payload||{},before=command.optimisticBefore||{};
+
+  if(type==='set-auto'){
+    command.expected={enabled:!!S.auto};
+  }else if(type==='buy-building'){
+    const id=String(payload.id||'');
+    command.expected={
+      id,
+      count:Math.max(0,optimisticNumber(S.b&&S.b[id])-optimisticNumber(before.building)),
+      cost:Math.max(0,optimisticNumber(before.gold)-optimisticNumber(S.gold))
+    };
+  }else if(type==='buy-tech'){
+    command.expected={id:String(payload.id||''),cost:Math.max(0,optimisticNumber(before.gold)-optimisticNumber(S.gold))};
+  }else if(type==='set-law'){
+    command.expected={id:String(S.law||'')};
+  }else if(type==='sign-pact'){
+    command.expected={bloc:String(payload.bloc||''),cost:Math.max(0,optimisticNumber(before.gold)-optimisticNumber(S.gold))};
+  }else if(type==='train-branch'){
+    const id=String(payload.id||'');
+    command.expected={
+      id,
+      count:Math.max(0,optimisticNumber(S.tr&&S.tr[id])-optimisticNumber(before.branch)),
+      goldCost:Math.max(0,optimisticNumber(before.gold)-optimisticNumber(S.gold)),
+      equipmentCost:Math.max(0,optimisticNumber(before.equip)-optimisticNumber(S.equip))
+    };
+  }else if(type==='disband-branch'){
+    command.expected={id:String(payload.id||''),count:Math.max(0,optimisticNumber(before.branch))};
+  }else if(type==='set-speed'){
+    command.expected={speed:Number(S.speed)};
+  }else if(type==='train-general'){
+    const id=Number(payload.id),general=Array.isArray(S.gens)?S.gens.find(g=>Number(g.id)===id):null;
+    command.expected={id,level:general?Number(general.lvl):0,cost:Math.max(0,optimisticNumber(before.gold)-optimisticNumber(S.gold))};
+  }else if(type==='set-commander'){
+    command.expected={id:S.cmd===null?null:Number(S.cmd)};
+  }else if(type==='advance-realm'){
+    command.expected={realm:Number(S.realm),cost:Math.max(0,optimisticNumber(before.qi)-optimisticNumber(S.qi))};
+  }else if(type==='buy-shop'){
+    const id=String(payload.id||'');
+    command.expected={
+      id,
+      level:Math.max(0,Math.floor(optimisticNumber(META.shop&&META.shop[id]))),
+      cost:Math.max(0,optimisticNumber(before.pp)-optimisticNumber(META.pp))
+    };
+  }else if(type==='poke-buy-ball'){
+    command.expected={
+      cost:Math.max(0,optimisticNumber(before.gold)-optimisticNumber(S.gold)),
+      balls:Math.max(0,Math.floor(optimisticNumber(S.poke&&S.poke.balls)))
+    };
+  }else if(type==='poke-toggle-team'){
+    const id=String(payload.id||''),team=Array.isArray(S.poke&&S.poke.team)?S.poke.team.slice():[];
+    command.expected={id,active:team.includes(id),team};
+  }else if(type==='poke-evolve'){
+    const id=String(payload.id||''),p=POKEMON.find(item=>item.id===id),stage=evoStage(id);
+    command.expected={
+      id,
+      stage,
+      cost:Math.max(0,optimisticNumber(before.pokeShards)-optimisticNumber(S.poke&&S.poke.shards)),
+      name:p&&evoChain(p)[stage-1]?String(evoChain(p)[stage-1].n||id):id
+    };
+  }else if(type==='poke-training'){
+    const id=String(payload.id||'');
+    command.expected={
+      id,
+      level:trainingLevel(id),
+      cost:Math.max(0,optimisticNumber(before.pokeBattlePoints)-optimisticNumber(S.poke&&S.poke.battlePoints))
+    };
+  }else if(type==='poke-mega-bond'){
+    command.expected={id:String(payload.id||'')};
+  }
+}
+function applyOptimisticCommand(command){
+  command.optimisticBefore=optimisticBeforeSnapshot(command.type,command.payload);
+  command.optimisticApplied=applyOptimisticAction(command.type,command.payload);
+  recordOptimisticExpectation(command);
+  return command.optimisticApplied;
 }
 
 function refreshOptimisticDisplay(type='',payload={}){
@@ -2701,6 +2887,7 @@ function refreshOptimisticDisplay(type='',payload={}){
   }
 
   if(type==='buy-shop'){renderShop();updateStatics();return;}
+  if(type.startsWith('poke-')){renderPokemon();return;}
 }
 
 function rebuildOptimisticState(){
@@ -2714,9 +2901,7 @@ function rebuildOptimisticState(){
   optimisticStandardRecruitCount=0;
 
   const pending=pendingOptimisticCommands();
-  for(const command of pending){
-    command.optimisticApplied=applyOptimisticAction(command.type,command.payload);
-  }
+  for(const command of pending)applyOptimisticCommand(command);
 
   updateOptimisticQueueBadge();
 }
@@ -2735,7 +2920,7 @@ function applyAuthoritativeEnvelope(result,batch=null){
   const serverState=result&&result.state;
   if(serverState&&serverState.META){
     const previousAch=Object.assign({},META.ach||{});
-    for(const key of AUTH_META_KEYS)if(Object.prototype.hasOwnProperty.call(serverState.META,key))META[key]=copyJson(serverState.META[key]);
+    META=mergeAuthoritativeMetaState(serverState.META,META);
     const unlocked=Object.keys(META.ach||{}).filter(id=>META.ach[id]&&!previousAch[id]);
     for(const id of unlocked){
       const achievement=ACH.find(item=>item.id===id);
@@ -2771,27 +2956,55 @@ function applyAuthoritativeEnvelope(result,batch=null){
 const SOFT_CONFIRM_ACTIONS=new Set([
   'mobilize','buy-building','buy-tech','set-law','sign-pact','train-branch',
   'disband-branch','set-target','set-speed','set-auto','train-general',
-  'set-commander','advance-realm','buy-shop'
+  'set-commander','advance-realm','buy-shop','poke-buy-ball',
+  'poke-toggle-team','poke-evolve','poke-training','poke-mega-bond'
 ]);
+function nearResultNumber(actual,expected){
+  actual=Number(actual);expected=Number(expected);
+  if(!Number.isFinite(actual)||!Number.isFinite(expected))return false;
+  return Math.abs(actual-expected)<=Math.max(1e-7,Math.abs(expected)*1e-9);
+}
+function sameStringArray(actual,expected){
+  if(!Array.isArray(actual)||!Array.isArray(expected)||actual.length!==expected.length)return false;
+  return actual.every((value,index)=>String(value)===String(expected[index]));
+}
 function softResultMatches(command,item){
   if(!item||!item.ok)return false;
-  if(command.type==='set-auto'){
-    const expected=command.optimisticExpectedEnabled;
-    return !!item.result&&item.result.enabled===expected;
+  const result=item.result||{},expected=command.expected||{};
+
+  if(command.type==='set-auto')return result.enabled===expected.enabled;
+  if(command.type==='buy-shop')return String(result.id||'')===String(expected.id||'')&&Number(result.level)===Number(expected.level)&&nearResultNumber(result.cost,expected.cost);
+  if(command.type==='buy-building')return String(result.id||'')===String(expected.id||'')&&Number(result.count)===Number(expected.count)&&nearResultNumber(result.cost,expected.cost);
+  if(command.type==='buy-tech')return String(result.id||'')===String(expected.id||'')&&nearResultNumber(result.cost,expected.cost);
+  if(command.type==='set-law')return String(result.id||'')===String(expected.id||'');
+  if(command.type==='sign-pact')return String(result.bloc||'')===String(expected.bloc||'')&&nearResultNumber(result.cost,expected.cost);
+  if(command.type==='train-branch')return String(result.id||'')===String(expected.id||'')&&Number(result.count)===Number(expected.count)&&nearResultNumber(result.goldCost,expected.goldCost)&&nearResultNumber(result.equipmentCost,expected.equipmentCost);
+  if(command.type==='disband-branch')return String(result.id||'')===String(expected.id||'')&&nearResultNumber(result.count,expected.count);
+  if(command.type==='set-speed')return Number(result.speed)===Number(expected.speed);
+  if(command.type==='train-general'){
+    const general=result.general||{};
+    return Number(general.id)===Number(expected.id)&&Number(general.lvl)===Number(expected.level)&&nearResultNumber(result.cost,expected.cost);
   }
-  if(command.type==='buy-shop'){
-    const result=item.result||{};
-    return String(result.id||'')===String(command.optimisticShopId||'')&&
-      Number(result.level)===Number(command.optimisticShopLevel)&&
-      Number(result.cost)===Number(command.optimisticShopCost);
+  if(command.type==='set-commander'){
+    const resultId=result.id===null?null:Number(result.id);
+    return resultId===expected.id;
   }
+  if(command.type==='advance-realm')return Number(result.realm)===Number(expected.realm)&&nearResultNumber(result.cost,expected.cost);
+  if(command.type==='poke-buy-ball')return Number(result.balls)===Number(expected.balls)&&nearResultNumber(result.cost,expected.cost);
+  if(command.type==='poke-toggle-team')return String(result.id||'')===String(expected.id||'')&&result.active===expected.active&&sameStringArray(result.team,expected.team);
+  if(command.type==='poke-evolve')return String(result.id||'')===String(expected.id||'')&&Number(result.stage)===Number(expected.stage)&&String(result.name||'')===String(expected.name||'')&&nearResultNumber(result.cost,expected.cost);
+  if(command.type==='poke-training')return String(result.id||'')===String(expected.id||'')&&Number(result.level)===Number(expected.level)&&nearResultNumber(result.cost,expected.cost);
+  if(command.type==='poke-mega-bond')return String(result.id||'')===String(expected.id||'');
   return true;
 }
 function canSoftConfirmBatch(batch,envelope,resultList){
-  return !envelope.world&&batch.commands.length>0&&
-    batch.commands.every(command=>SOFT_CONFIRM_ACTIONS.has(command.type))&&
-    resultList.length===batch.commands.length&&
-    resultList.every((item,index)=>softResultMatches(batch.commands[index],item));
+  if(envelope.world||batch.commands.length<1||resultList.length!==batch.commands.length)return false;
+  const byId=new Map(resultList.map(item=>[String(item&&item.actionId||''),item]));
+  return batch.commands.every(command=>
+    command.optimisticApplied&&
+    SOFT_CONFIRM_ACTIONS.has(command.type)&&
+    softResultMatches(command,byId.get(command.actionId))
+  );
 }
 function softConfirmEnvelope(result,batch=null){
   if(result&&result.revision!==undefined)SERVER_REVISION=Number(result.revision);
@@ -2809,11 +3022,9 @@ function softConfirmEnvelope(result,batch=null){
   }
 
   if(state&&state.META){
-    // The response contains the confirmed result of the completed batch.
-    // Store it as the new base, then replay only commands that are still
-    // queued. This prevents an older PP/shop snapshot from replacing newer
-    // local purchases.
-    optimisticCanonicalMeta=copyJson(state.META);
+    // Replace only authoritative progression fields. Local display and
+    // accessibility preferences may still be waiting for their preference save.
+    optimisticCanonicalMeta=mergeAuthoritativeMetaState(state.META,META);
   }else{
     optimisticCanonicalMeta=copyJson(META);
   }
@@ -2829,16 +3040,24 @@ function softConfirmEnvelope(result,batch=null){
   reconcileCombatVisual();
   replayLocalConquests();
   refreshActiveCombatRates('soft-confirmation');
+
+  // Restore passive progress earned while the response travelled back.
+  const transit=responseTransitSeconds(result);
+  if(transit>0.015){
+    applyPredictedLiveEconomy(transit);
+    predictLiveSiege(transit);
+  }
 }
 const SERVER_ACTION_BATCH_MAX=20;
 const SERVER_ACTION_QUEUE_MAX=200;
-const SERVER_ACTION_FLUSH_MS=35;
+const SERVER_ACTION_FLUSH_MS=8;
 const CLIENT_VALIDATED_ACTIONS=new Set([
-  'buy-building','buy-tech','set-law','sign-pact','train-branch',
-  'disband-branch','set-target','attack','combat-complete','set-speed','set-auto',
-  'train-general','set-commander','recruit-general','advance-realm','buy-shop'
+  'set-target','attack','combat-complete','set-speed','set-auto','set-commander'
 ]);
-const IDLE_SAVE_DELAY_MS=1800;
+const SILENT_FAILURE_ACTIONS=new Set([
+  'mobilize','set-target','combat-intent','world-pulse','set-speed','set-auto'
+]);
+const IDLE_SAVE_DELAY_MS=8000;
 let lastGameplayInputAt=0;
 let serverActionQueue=[];
 let serverActionTimer=null;
@@ -2886,6 +3105,8 @@ function actionFailureMessage(item){
 
 function refreshAfterActionBatch(types){
   const changed=new Set(Array.isArray(types)?types:[]);
+  if(changed.has('train-branch')||changed.has('disband-branch')||
+     changed.has('mobilize')||changed.has('attack'))clampTrained();
 
   // These mutate text, progress bars and disabled states only. They do not
   // destroy/recreate the page, so buttons stay under the pointer.
@@ -2940,7 +3161,7 @@ async function flushServerActionQueue(){
     return;
   }
   if(saveBusy){
-    scheduleServerActionFlush(30);
+    scheduleServerActionFlush(15);
     return;
   }
 
@@ -3001,7 +3222,7 @@ async function flushServerActionQueue(){
         }));
       }else{
         const message=actionFailureMessage(item);
-        if(command.type!=='mobilize'&&!command.quiet){
+        if(!SILENT_FAILURE_ACTIONS.has(command.type)){
           toast('Order failed',message,'bad');
         }
         command.resolve(null);
@@ -3076,6 +3297,7 @@ async function flushServerActionQueue(){
 function runServerAction(type,payload={},quiet=false){
   if(!ACCOUNT||!S||saveConflict)return Promise.resolve(null);
   lastGameplayInputAt=Date.now();
+  if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
 
   // Automatic siege/world pulses are coalesced so a slow connection cannot
   // create a large queue of obsolete timer actions.
@@ -3110,23 +3332,11 @@ function runServerAction(type,payload={},quiet=false){
       quiet,
       resolve,
       optimisticApplied:false,
+      optimisticBefore:null,
+      expected:null,
       targetIntentSeq:(type==='attack'||type==='set-target')?targetIntentSeq:0
     };
-    command.optimisticApplied=applyOptimisticAction(type,payload);
-    if(type==='set-auto')command.optimisticExpectedEnabled=!!S.auto;
-    if(type==='buy-shop'&&command.optimisticApplied){
-      const id=String(payload.id||'');
-      command.optimisticShopId=id;
-      command.optimisticShopLevel=Math.max(
-        0,
-        Math.floor(optimisticNumber(META.shop&&META.shop[id]))
-      );
-      const item=SHOP.find(rule=>rule.id===id);
-      command.optimisticShopCost=item
-        ?shopCostExact(item,command.optimisticShopLevel-1)
-        :0;
-      command.optimisticShopPP=optimisticNumber(META.pp);
-    }
+    applyOptimisticCommand(command);
     if(CLIENT_VALIDATED_ACTIONS.has(type)&&!command.optimisticApplied){
       if(!pendingServerActionCount())clearOptimisticCanonical();
       resolve(null);
@@ -3354,10 +3564,21 @@ function branchLocked(b){
 function trainCostB(b,n){return{g:b.g*Math.pow(n,0.8),e:b.e*Math.pow(n,0.6)};}
 async function trainBranch(id,frac){
   const b=BRANCHES.find(x=>x.id===id);if(!b)return;
+  const lock=branchLocked(b);
+  if(lock){toast('Formation locked',lock,'bad');return;}
+
+  // Repaint first so a stale disabled state cannot survive a prior response.
+  clampTrained();
+  updateBranches();
+
   const result=await runServerAction('train-branch',{id,fraction:frac},true);
   if(result&&result.result){
     sfx('buy');
-    toast(b.ico+' '+b.n,fmt(Number(result.result.count)||0)+' soldiers complete '+b.n+' training.','grn');
+    toast(
+      b.ico+' '+b.n,
+      fmt(Number(result.result.count)||0)+' soldiers complete '+b.n+' training.',
+      'grn'
+    );
   }
 }
 async function disbandBranch(id){
@@ -3541,6 +3762,9 @@ function refreshLocalCombatRate(code,reason='state-change',force=false){
     combat.rateReason=String(reason||'state-change');
   }
   combat.lastAt=now;
+  if(canResolveCombatImmediately(combat)){
+    resolveImmediateCombat(code,combat);
+  }
   return combat;
 }
 function refreshActiveCombatRates(reason='state-change',force=false){
@@ -3637,12 +3861,41 @@ function activateLocalCombat(code){
   },true);
   return combat;
 }
+function instantCombatSeconds(combat){
+  if(!combat)return Infinity;
+  const dps=Math.max(0,Number(combat.rawDps)||0);
+  const remaining=Math.max(0,Number(combat.remaining)||0);
+  return dps>1e-12?remaining/dps:Infinity;
+}
+function canResolveCombatImmediately(combat){
+  // The completion validator already gives short battles a 0.20 second
+  // envelope. Restrict instant visual completion to a slightly smaller
+  // window so the browser never outruns that validation allowance.
+  return instantCombatSeconds(combat)<=0.18;
+}
+function resolveImmediateCombat(code,combat){
+  code=String(code||'');
+  if(!combat||combat.completing||!canResolveCombatImmediately(combat))return false;
+
+  const seconds=Math.max(0,instantCombatSeconds(combat));
+  combat.elapsedActive=Math.max(Number(combat.elapsedActive)||0,seconds);
+  combat.remaining=0.000001;
+  combat.lastAt=performance.now();
+  COMBAT_VISUAL_HP[code]=0.000001;
+
+  applyLocalConquest(code);
+  completeLocalCombat(code);
+  return true;
+}
 function startLocalCombat(code){
   code=String(code||'');
   if(!code||!S||S.conq[code])return null;
   if(!LOCAL_COMBATS[code])LOCAL_COMBATS[code]=calculateLocalCombat(code);
   const combat=activateLocalCombat(code);
-  if(combat)COMBAT_VISUAL_HP[code]=combat.remaining;
+  if(combat){
+    COMBAT_VISUAL_HP[code]=combat.remaining;
+    resolveImmediateCombat(code,combat);
+  }
   return combat;
 }
 function advanceLocalCombat(code){
@@ -3718,7 +3971,10 @@ function completeLocalCombat(code){
     code,
     startedAt:combat.startedAt,
     completedAt:Date.now(),
-    clientElapsed:combat.elapsedActive
+    clientElapsed:Math.max(
+      Number(combat.elapsedActive)||0,
+      Math.min(0.18,instantCombatSeconds(combat))
+    )
   },true).then(result=>{
     if(!result){
       combat.completing=false;
@@ -3900,7 +4156,7 @@ function predictLiveSiege(rawDt){
   if(!country||canSiege(country))return;
 
   const combat=localCombat(country.code)||startLocalCombat(country.code);
-  if(!combat)return;
+  if(!combat||S.conq[country.code]||isLocalConquest(country.code))return;
 
   const next=advanceLocalCombat(country.code);
   if(next===null)return;
@@ -4168,10 +4424,10 @@ async function buyShop(id){
   const item=SHOP.find(rule=>rule.id===String(id||''));
   if(!item)return;
   const level=Math.max(0,Math.floor(shopLvl(item.id)));
-  if(level>=item.max)return;
-  const cost=shopCostExact(item,level);
-  if(optimisticNumber(META.pp)+1e-9<cost)return;
+  if(level>=item.max){toast('Upgrade maxed',item.n+' is already at maximum level.','');return;}
 
+  // Let runServerAction predict when possible and fall back to authoritative
+  // validation when the displayed PP value is stale.
   const result=await runServerAction('buy-shop',{id:item.id},true);
   if(result)sfx('buy');
 }
@@ -4619,7 +4875,7 @@ function renderBuyRow(){const w=$('buyRow');w.innerHTML='';
   [[1,'×1'],[10,'×10'],[100,'×100'],['max','MAX']].forEach(p=>{
     const b=document.createElement('button');
     b.className='pill'+(S.buyN===p[0]?' on':'');b.textContent=p[1];
-    b.onclick=()=>{S.buyN=p[0];renderBuyRow();};w.appendChild(b);});}
+    b.onclick=()=>{S.buyN=p[0];renderBuyRow();updateBuildings();};w.appendChild(b);});}
 function hashStr(x){let h=2166136261;for(let i=0;i<x.length;i++){h^=x.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
 function prng(seed){let a=seed>>>0;return function(){a=(Math.imul(a,1664525)+1013904223)>>>0;return a/4294967296;};}
 function portraitSVG(g){const r=prng(hashStr(g.name+'|'+g.id+'|'+g.r));
@@ -4664,7 +4920,7 @@ function renderGenerals(){$('genCount').textContent=S.gens.length+' serving · '
       '<div class="bio">“'+gn.bio+'”</div>'+
       '<div class="st"><span>Lv <b>'+gn.lvl+'</b></span><span>XP <b>'+gn.xp+'/'+(gn.lvl*4)+
       '</b></span><span><b>'+specLine(gn)+'</b></span></div>'+
-      '<div class="acts"><button class="tr">Train — '+fmt(trainCost(gn))+' 🪙</button>'+
+      '<div class="acts"><button class="tr" '+(S.gold<trainCost(gn)?'disabled':'')+'>Train — '+fmt(trainCost(gn))+' 🪙</button>'+
       (gn.spec==='combat'?'<button class="cm">'+(S.cmd===gn.id?'★ Commanding':'Give command')+'</button>':'')+
       '</div>'+(S.cmd===gn.id?'<div class="cmdtag" style="margin-top:6px">LEADS EVERY ASSAULT — AT RISK</div>':'');
     d.querySelector('.tr').onclick=()=>trainGeneral(gn.id);
