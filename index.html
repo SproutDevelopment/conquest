@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://flagcdn.com; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests">
 <title>IRON MANDATE — Pokémon World Step 19</title>
 <style>
 :root{
@@ -170,7 +170,11 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 .cc:hover{border-color:var(--line2)}
 .cc.target{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass)}
 .cc .hd{display:flex;align-items:center;gap:7px;cursor:pointer}
-.cc .flag{font-size:21px;line-height:1}
+.cc .flag{font-size:21px;line-height:1;display:inline-flex;align-items:center;justify-content:center;min-width:28px}
+.country-flag{width:26px;height:18px;object-fit:cover;border-radius:2px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.16);vertical-align:middle}
+.inline-country-flag{width:20px;height:14px;object-fit:cover;border-radius:1px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.14);vertical-align:-2px;margin-right:4px}
 .cc .nm{font-weight:700;font-size:13.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cc .tier{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.05em}
 .cc .bloc{font-size:9.5px;letter-spacing:.1em;color:var(--steel);border:1px solid var(--line);border-radius:3px;padding:1px 4px;margin-top:4px;display:inline-block}
@@ -183,12 +187,6 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 .cc.done{background:linear-gradient(160deg,#16220f,#121a0d);border-color:#33502c}
 .cc.done .occ{font-size:10px;letter-spacing:.22em;color:var(--green-hi);font-weight:800;margin-top:6px}
 .cc.done .inc{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px}
-.cc.looting{background:linear-gradient(160deg,#241f0e,#17140b);border-color:var(--brass)}
-.cc.looting .loot-title{font-size:10px;letter-spacing:.2em;color:var(--brass-hi);font-weight:800;margin-top:7px}
-.cc.looting .loot-note{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:4px}
-.cc.looting .lootbar{height:7px;background:var(--sunken);border:1px solid var(--line2);border-radius:4px;overflow:hidden;margin-top:7px}
-.cc.looting .lootbar>i{display:block;height:100%;width:8%;background:linear-gradient(90deg,var(--brass),var(--brass-hi));transition:width .12s linear}
-.cc.looting .loot-percent{font-family:var(--mono);font-size:10px;color:var(--brass-hi);text-align:right;margin-top:3px}
 .cc .rebel{position:absolute;top:7px;right:8px;font-size:10px;color:var(--blood-hi);letter-spacing:.1em;font-weight:800;animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:.25}}
 .cc .home{position:absolute;top:7px;right:8px;font-size:10px;color:var(--brass);letter-spacing:.14em;font-weight:800}
@@ -800,7 +798,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
           <div class="chline" id="chalLine"></div>
           <div class="small" id="throneLine" style="margin-top:8px"></div>
           <button id="prestigeBtn">Claim the mandate</button>
-          <div class="small" style="margin-top:8px">Requires 10 held territories. The server recalculates and validates every claim.</div>
+          <div class="small" style="margin-top:8px">Requires 10 held territories.</div>
         </div>
       </div>
       <div class="sect panel">
@@ -814,9 +812,9 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       <div class="sect panel">
         <div class="ptitle">Campaign ledger</div>
         <div class="statgrid" id="statGrid"></div>
-        <div class="ptitle" style="margin-top:16px">Player Leaderboard <span class="r">rankings paused · authority phase 8 is active</span></div>
+        <div class="ptitle" style="margin-top:16px">Player Records</div>
         <div class="statgrid leaderboard-scroll" id="lbPlayers" role="region" aria-label="Top 100 player leaderboard" tabindex="0"></div>
-        <div class="ptitle" style="margin-top:16px">Country Leaderboard <span class="r">country rankings resume after Pokémon systems become server-authoritative</span></div>
+        <div class="ptitle" style="margin-top:16px">Country Records</div>
         <div class="statgrid leaderboard-scroll" id="lbNations" role="region" aria-label="All countries leaderboard" tabindex="0"></div>
       </div>
       <div class="sect panel">
@@ -832,23 +830,23 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
         <div class="note" id="codex"></div>
       </div>
       <div class="sect panel">
-        <div class="ptitle">Account &amp; server save <span class="r" id="accountUsername"></span></div>
-        <p class="small" id="serverStatus" style="margin-bottom:9px">Authenticated saves sync to the server. This build does not use browser save slots, import strings, or local leaderboards.</p>
+        <div class="ptitle">Account &amp; progress <span class="r" id="accountUsername"></span></div>
+        <p class="small" id="serverStatus" style="margin-bottom:9px">Progress is saved automatically.</p>
         <div class="rowbtns" style="align-items:center">
           <input id="commanderNameIn" maxlength="20" placeholder="Commander name" style="width:170px">
           <button class="pill" id="commanderSaveBtn">Rename commander</button>
-          <button class="pill" id="saveNowBtn">☁ Sync now</button>
+          <button class="pill" id="saveNowBtn">💾 Save now</button>
           <button class="pill" id="logoutBtn">Log out</button>
           <button class="pill" id="soundTgl">🔊 Sound: on</button>
           <button class="pill" id="hcTgl">◐ High contrast</button>
           <button class="pill" id="fontTgl">🔎 Large text</button>
           <button class="pill" id="hardResetBtn" style="border-color:#5a2c26;color:var(--blood-hi)">☠ Delete account progress</button>
         </div>
-        <p class="small">Hotkeys: <kbd>R</kbd> mobilize · <kbd>1–8</kbd> switch tabs. Closing the tab is safe after the server status reports a successful sync.</p>
+        <p class="small">Hotkeys: <kbd>R</kbd> mobilize · <kbd>1–8</kbd> switch tabs.</p>
       </div>
     </section>
   </main>
-  <footer>IRON MANDATE · authority phase 8.10 · full rollback and latency audit</footer>
+  <footer>IRON MANDATE · GALACTIC ASCENDANCY</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -898,7 +896,8 @@ function showAuth(){
   serverActionActiveBatch=null;serverActionSending=false;
   clearTimeout(serverActionTimer);serverActionTimer=null;
   clearOptimisticCanonical();
-  LOCAL_LOOTING={};targetIntentSeq=0;targetIntentCode='';targetIntentPending=false;
+  COMBAT_LEASES={};LOCAL_CONQUESTS={};
+  targetIntentSeq=0;targetIntentCode='';targetIntentPending=false;
   targetIntentKnown=false;clearCombatVisual();
   AUTHORITY_PHASE=0;SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
   stateVersion=0;lastSavedVersion=0;
@@ -925,7 +924,7 @@ async function gameApi(action,payload={},options={}){
       signal:controller.signal
     });
   }catch(error){
-    if(error&&error.name==='AbortError')throw new Error('The server request timed out. Check your connection and try again.');
+    if(error&&error.name==='AbortError')throw new Error('The connection timed out. Check your connection and try again.');
     throw error;
   }finally{
     clearTimeout(timeoutId);
@@ -933,7 +932,7 @@ async function gameApi(action,payload={},options={}){
 
   const result=await response.json().catch(()=>({}));
   if(!response.ok){
-    const error=new Error(result.error||('Server error '+response.status));
+    const error=new Error(result.error||('Request failed '+response.status));
     error.status=response.status;
     error.details=result;
     throw error;
@@ -953,7 +952,7 @@ async function gameApiWithRetry(action,payload={},options={}){
       await new Promise(resolve=>setTimeout(resolve,350));
     }
   }
-  throw lastError||new Error('The server request failed.');
+  throw lastError||new Error('The request failed.');
 }
 async function registerAccount(){
   const username=normalizeUsername($('registerUsername').value),password=$('registerPassword').value,confirmPassword=$('registerPasswordConfirm').value;
@@ -964,7 +963,7 @@ async function registerAccount(){
   authMessage('Creating account…');
   const result=await supabaseClient.auth.signUp({email:usernameEmail(username),password,options:{data:{username}}});
   if(result.error){authMessage(result.error.message,true);return;}
-  if(!result.data.session){authMessage('Account created, but automatic login is disabled. Disable email confirmation in Supabase Auth settings.',true);return;}
+  if(!result.data.session){authMessage('Account created. Please sign in to continue.',true);return;}
   await boot();
 }
 async function loginAccount(){
@@ -980,7 +979,7 @@ async function logoutAccount(){
     saveDirty=true;
     const saved=await flushServerSave(false,true);
     if(!saved){
-      toast('Logout paused','Your latest progress has not reached the server. Resolve the sync error or reload before logging out.','bad');
+      toast('Logout paused','Your latest progress has not been saved. Try again or reload before logging out.','bad');
       return;
     }
   }
@@ -1099,11 +1098,23 @@ C('fj','Fiji','🇫🇯','OC',2,0.94),C('pg','Papua New Guinea','🇵🇬','OC',
 C('nz','New Zealand','🇳🇿','OC',3,5.2,'PA'),C('au','Australia','🇦🇺','OC',5,26.4,'PA'),
 ];
 const CBY={};for(const c of COUNTRIES)CBY[c.code]=c;
+function countryFlagUrl(c){
+  return c&&c.plane==='earth'&&CBY[c.code]
+    ?'https://flagcdn.com/w40/'+encodeURIComponent(String(c.code).toLowerCase())+'.png'
+    :'';
+}
+function countryFlagMarkup(c,inline=false){
+  const url=countryFlagUrl(c);
+  if(url)return'<img class="'+(inline?'inline-country-flag':'country-flag')+
+    '" src="'+url+'" alt="'+htmlEscape(c.name)+' flag" loading="lazy">';
+  return'<span aria-hidden="true">'+htmlEscape(String(c&&c.flag||''))+'</span>';
+}
+function countryPlainName(c){return c?String(c.name||c.code||''):'—';}
 function defOf(c){return c.def?c.def:50*Math.pow(9,c.tier)*(c.code==='us'?3:1);}
 const TIERMULT=[10,8,6,4.5,3.2,2.2,1.6,1.25,1.1,1];
 const PLANES=[
  {id:'earth',n:'Earth',ico:'🌍',feat:'Blocs, pacts & world tension rule this plane'},
- {id:'space',n:'Solar Dominion',ico:'🚀',feat:'SUPPLY LINES — a body can only be besieged from an adjacent held body'},
+ {id:'space',n:'Solar Dominion',ico:'🚀',feat:'SUPPLY LINES — conquer connected worlds and command orbital legions, starships and hyperdrive technology'},
  {id:'magic',n:'Arcane Expanse',ico:'🔮',feat:'MANA & SPELLS — territories yield Mana; cast Firestorm, Ward and Mind Fracture'},
  {id:'cult',n:'Ascendant Peaks',ico:'☯',feat:'TRIBULATIONS — each summit demands a minimum cultivation stage'},
  {id:'future',n:'Chrono Frontier',ico:'🤖',feat:'TEMPORAL FLUX — defenses oscillate ±40%; time your strikes'},
@@ -1448,6 +1459,9 @@ const BUILDINGS=[
  {id:'bar',ico:'⛺',n:'Barracks',base:60,d:'+1 click power each'},
  {id:'civ',ico:'🏭',n:'Civilian Factory',base:400,d:'+8 gold / sec each'},
  {id:'mil',ico:'🔧',n:'Military Factory',base:2500,d:'+3 equipment / sec each (equipment multiplies army power)'},
+ {id:'clone',ico:'🧬',n:'Cloning Bay',base:8e10,d:'+6 manpower / sec each',plane:'space'},
+ {id:'orb',ico:'🏗️',n:'Orbital Shipyard',base:2.5e11,d:'+12 equipment / sec and +2% space-unit power each (maximum +100%)',plane:'space'},
+ {id:'reactor',ico:'⚛️',n:'Antimatter Reactor',base:7e11,d:'+40 gold / sec and +4 equipment / sec each',plane:'space'},
  {id:'aca',ico:'📜',n:'Arcane Academy',base:60000,d:'+6 Mana / sec each',plane:'magic'},
  {id:'well',ico:'🔮',n:'Mana Well',base:900000,d:'+30 Mana / sec each',plane:'magic'},
  {id:'shrine',ico:'🛕',n:'Dao Shrine',base:5e6,d:'+8 Qi / sec each',plane:'cult'}];
@@ -1469,6 +1483,23 @@ const TECHS=[
  {id:'nuke',ico:'☢️',n:'Nuclear Arsenal',cost:7e8,t:'pow',v:4,d:'Army power ×4'},
  {id:'ai',ico:'🤖',n:'AI Drone Swarms',cost:5e9,t:'pow',v:5,d:'Army power ×5'},
  {id:'spirit',ico:'🔥',n:'Spirit-Tech Fusion',cost:4e10,t:'pow',v:6,needRealm:2,d:'Spirit-stone armor: army power ×6 (needs Foundation realm)'},
+ {id:'stormtech',ico:'⚪',n:'Storm Trooper Corps',cost:4e10,t:'unlock',needPlane:'space',d:'Unlocks Storm Troopers.'},
+ {id:'droidtech',ico:'🤖',n:'Droid Foundries',cost:1.2e11,t:'unlock',needPlane:'space',d:'Unlocks Battle Droids.'},
+ {id:'fightertech',ico:'🛩️',n:'Starfighter Doctrine',cost:3.5e11,t:'unlock',needPlane:'space',d:'Unlocks Starfighters.'},
+ {id:'forcetech',ico:'✨',n:'Force Academy',cost:1.1e12,t:'unlock',needPlane:'space',d:'Unlocks Jedi Knights and Sith Marauders.'},
+ {id:'destroyertech',ico:'🚢',n:'Capital Shipyards',cost:4e12,t:'unlock',needPlane:'space',d:'Unlocks Star Destroyers.'},
+ {id:'clonetech',ico:'🧬',n:'Kaminoan Clone Doctrine',cost:7.5e11,t:'unlock',needPlane:'space',d:'Unlocks Clone Troopers.'},
+ {id:'mandotech',ico:'🪖',n:'Beskar Foundries',cost:2.2e12,t:'unlock',needPlane:'space',d:'Unlocks Mandalorian Commandos.'},
+ {id:'walkertech',ico:'🦿',n:'Walker Assembly Lines',cost:6.5e12,t:'unlock',needPlane:'space',d:'Unlocks Imperial Walkers.'},
+ {id:'frigatetech',ico:'🛸',n:'Frigate Construction',cost:1.5e13,t:'unlock',needPlane:'space',d:'Unlocks Rebel Frigates.'},
+ {id:'battlecruisertech',ico:'🛰️',n:'Battlecruiser Doctrine',cost:5e13,t:'unlock',needPlane:'space',d:'Unlocks Battlecruisers.'},
+ {id:'dreadtech',ico:'🌌',n:'Dreadnought Supremacy',cost:2e14,t:'unlock',needPlane:'space',d:'Unlocks Galactic Dreadnoughts.'},
+ {id:'fleetai',ico:'🧠',n:'Fleet Coordination AI',cost:6e14,t:'spacefleet',v:1.2,needPlane:'space',d:'All space formations gain ×1.2 power.'},
+ {id:'quantumshield',ico:'🛡️',n:'Quantum Shield Matrix',cost:1.8e15,t:'spacecas',v:0.85,needPlane:'space',d:'Space combat casualties −15%.'},
+ {id:'spaceprod',ico:'📦',n:'Galactic Logistics',cost:1.2e13,t:'spaceprod',v:1.5,needPlane:'space',d:'Space buildings produce ×1.5 resources.'},
+ {id:'spaceshield',ico:'🔷',n:'Deflector Shield Network',cost:3.5e13,t:'spacecas',v:0.75,needPlane:'space',d:'Casualties −25% while fighting in the Solar Dominion.'},
+ {id:'spacetarget',ico:'🎯',n:'Orbital Targeting Grid',cost:9e13,t:'spacedef',v:0.12,needPlane:'space',d:'Enemy defence −12% in the Solar Dominion.'},
+ {id:'spacewarp',ico:'🌠',n:'Hyperdrive Assault Doctrine',cost:2.5e14,t:'spacesiege',v:1.5,needPlane:'space',d:'Space siege and storm damage caps ×1.5.'},
  {id:'warp',ico:'🛸',n:'Warp Logistics',cost:2.5e10,t:'pow',v:8,needPlane:'space',d:'Fold space around your fleets: army power ×8 (needs Solar Dominion)'},
  {id:'rune',ico:'🜏',n:'Rune Engines',cost:2.5e14,t:'pow',v:10,needPlane:'magic',d:'Warmachines etched in living runes: ×10 (needs Arcane Expanse)'},
  {id:'daoarm',ico:'⚔️',n:'Dao Armaments',cost:2e21,t:'pow',v:12,needPlane:'cult',d:'Blades that cut concepts: ×12 (needs Ascendant Peaks)'},
@@ -2069,7 +2100,7 @@ async function breedPokemon(){
   const result=await runServerAction('poke-breed',{first,second},true);
   if(result&&result.result){
     const p=POKEMON.find(x=>x.id===result.result.egg.species);
-    sfx('buy');toast('🥚 EGG RECEIVED',(p?p.n:'Pokémon')+' egg entered a server-timed incubator.','cyan');
+    sfx('buy');toast('🥚 EGG RECEIVED',(p?p.n:'Pokémon')+' egg entered the incubator.','cyan');
   }
 }
 
@@ -2144,7 +2175,7 @@ async function activateTera(id){
   if(result&&result.result&&result.result.blocked){
     toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');return;
   }
-  if(result){sfx('realm');toast('💠 TERASTALIZATION','The server started the crystal timer.','cyan');}
+  if(result){sfx('realm');toast('💠 TERASTALIZATION','Crystal energy surrounds your partner.','cyan');}
 }
 
 function updateTeraTimer(){
@@ -2166,7 +2197,7 @@ async function activateDmax(id){
   if(result&&result.result&&result.result.blocked){
     toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');return;
   }
-  if(result){sfx('realm');toast(GMAX_FORMS[id]?'🌌 GIGANTAMAX':'🏟️ DYNAMAX','The server started the transformation timer.','cyan');}
+  if(result){sfx('realm');toast(GMAX_FORMS[id]?'🌌 GIGANTAMAX':'🏟️ DYNAMAX','The transformation has begun.','cyan');}
 }
 
 function updateDmaxTimer(){
@@ -2196,7 +2227,7 @@ async function activateMega(id){
   if(result&&result.result&&result.result.blocked){
     toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');return;
   }
-  if(result){sfx('realm');toast('💎 MEGA EVOLUTION','The server started the transformation timer.','cyan');}
+  if(result){sfx('realm');toast('💎 MEGA EVOLUTION','The transformation has begun.','cyan');}
 }
 
 function updateMegaTimer(){
@@ -2216,7 +2247,7 @@ async function activateZMove(){
   if(result&&result.result&&result.result.blocked){
     toast('Order Gauntlet failed',result.result.reason||'That mechanic is forbidden.','bad');return;
   }
-  if(result){sfx('realm');toast('✨ Z-MOVE UNLEASHED','The server started the Z-Move timer.','cyan');}
+  if(result){sfx('realm');toast('✨ Z-MOVE UNLEASHED','Z-Power surges through the team.','cyan');}
 }
 function updateZTimer(){if(!S||!S.poke)return;const st=$('zStatus'),bt=$('zMoveBtn');if(!st||!bt)return;if(zActive())st.textContent='Active '+Math.ceil(zRemaining()/1000)+'s';else if(zCooldownRemaining())st.textContent='Cooldown '+Math.ceil(zCooldownRemaining()/1000)+'s';else st.textContent='Ready';bt.disabled=S.poke.zCrystals<1||zActive()||zCooldownRemaining()>0||!S.poke.team.length||!!megaActiveId()||!!dmaxActiveId()||!!teraActiveId();bt.textContent=zActive()?'Z-Move active':zCooldownRemaining()?'Z-Move cooling down':'Unleash Z-Move';}
 function raidStars(){return Math.min(5,1+Math.floor(pokemonRegionHeld('galar')/4));}
@@ -2253,7 +2284,7 @@ async function catchPokemon(id){
     toast('🔴 '+(p?p.n:id)+' captured',
       'Bond '+fmt(Number(r.bond)||0)+' · +'+fmt(Number(r.shardGain)||0)+' Evolution Shards','grn');
     sfx('realm');
-  }else toast('💨 It broke free',(p?p.n:id)+' escaped the server-verified capture roll.','bad');
+  }else toast('💨 It broke free',(p?p.n:id)+' broke free at the last moment.','bad');
 }
 
 async function togglePokemon(id){
@@ -2316,7 +2347,7 @@ let META=defaultMeta();
 function shopLvl(id){return META.shop[id]||0;}
 function conqCount(){return S?Object.keys(S.conq).length:0;}
 function newRun(){
-  throw new Error('Authority Phase 8 campaign state is created by Supabase.');
+  throw new Error('A campaign must be started from the command screen.');
 }
 
 
@@ -2516,6 +2547,13 @@ function applyOptimisticAction(type,payload){
     return true;
   }
 
+  if(type==='combat-lease-redeem'){
+    const code=String(payload.code||'');
+    if(!code||!BY[code])return false;
+    applyLocalConquest(code);
+    return true;
+  }
+
   if(type==='set-speed'){
     const speed=Number(payload.speed);
     if(![0,1,2,4].includes(speed))return false;
@@ -2707,7 +2745,7 @@ function applyAuthoritativeEnvelope(result,batch=null){
   rebuildOptimisticState();
   restoreLatestTargetIntent(batch);
   reconcileCombatVisual();
-  reconcileLootingState();
+  replayLocalConquests();
 
   // Cover response transit so passive counters and the active siege do not
   // visibly step backwards between server processing and browser receipt.
@@ -2758,7 +2796,7 @@ function softConfirmEnvelope(result,batch=null){
   }
   restoreLatestTargetIntent(batch);
   reconcileCombatVisual();
-  reconcileLootingState();
+  replayLocalConquests();
 }
 
 const SERVER_ACTION_BATCH_MAX=20;
@@ -2766,7 +2804,7 @@ const SERVER_ACTION_QUEUE_MAX=200;
 const SERVER_ACTION_FLUSH_MS=35;
 const CLIENT_VALIDATED_ACTIONS=new Set([
   'buy-building','buy-tech','set-law','sign-pact','train-branch',
-  'disband-branch','set-target','attack','set-speed','set-auto',
+  'disband-branch','set-target','attack','combat-lease-redeem','set-speed','set-auto',
   'train-general','set-commander','recruit-general','advance-realm','buy-shop'
 ]);
 const IDLE_SAVE_DELAY_MS=1800;
@@ -2812,7 +2850,7 @@ function hasPendingServerAction(type,mode='',code=''){
 }
 
 function actionFailureMessage(item){
-  return item&&item.error?String(item.error):'The server rejected this order.';
+  return item&&item.error?String(item.error):'That order could not be completed.';
 }
 
 function refreshAfterActionBatch(types){
@@ -2861,7 +2899,7 @@ function refreshAfterActionBatch(types){
 }
 
 function resolveFailedActionBatch(commands,message,showToast=true){
-  if(showToast)toast('☁ Orders rejected',message,'bad');
+  if(showToast)toast('Order failed',message,'bad');
   for(const command of commands)command.resolve(null);
 }
 
@@ -2923,7 +2961,7 @@ async function flushServerActionQueue(){
       const item=byId.get(command.actionId);
       if(item&&item.ok){
         if(!command.quiet){
-          toast('☁ Order confirmed','The server accepted the action.','grn');
+          toast('✓ Order complete','The order is complete.','grn');
         }
         command.resolve(Object.assign({},envelope,{
           result:item.result||{},
@@ -2933,7 +2971,7 @@ async function flushServerActionQueue(){
       }else{
         const message=actionFailureMessage(item);
         if(command.type!=='mobilize'&&!command.quiet){
-          toast('☁ Order rejected',message,'bad');
+          toast('Order failed',message,'bad');
         }
         command.resolve(null);
       }
@@ -2951,18 +2989,20 @@ async function flushServerActionQueue(){
       rollbackAndReplayOptimisticState();
       resolveFailedActionBatch(
         batch.commands,
-        'The account changed in another tab or device. Reload to continue.',
+        'Progress changed in another tab or device. Reload to continue.',
         false
       );
       toast(
-        '☁ Action conflict',
-        'Reload to continue from the canonical server state.',
+        'Progress conflict',
+        'Reload to continue from the latest progress.',
         'bad'
       );
     }else if(status>=400&&status<500&&status!==429){
       serverActionActiveBatch=null;
       for(const command of batch.commands){
-        if(command.type==='attack')clearCombatVisual(String(command.payload&&command.payload.code||''));
+        const code=String(command.payload&&command.payload.code||'');
+        if(command.type==='attack')clearCombatVisual(code);
+        if(command.type==='combat-lease-redeem')rollbackLocalConquest(code);
       }
       rollbackAndReplayOptimisticState();
       resolveFailedActionBatch(
@@ -2976,8 +3016,8 @@ async function flushServerActionQueue(){
       if(!serverActionDelayToastShown){
         serverActionDelayToastShown=true;
         toast(
-          '☁ Connection delayed',
-          'Your orders are still queued and will retry automatically.',
+          'Connection delayed',
+          'Your orders are still queued.',
           ''
         );
       }
@@ -3008,14 +3048,22 @@ function runServerAction(type,payload={},quiet=false){
     const siegeCode=String(payload.code||S.target||'');
     if(hasPendingServerAction('attack','siege',siegeCode))return Promise.resolve(null);
   }
+  if(type==='combat-lease-start'){
+    const code=String(payload.code||'');
+    if(hasPendingServerAction('combat-lease-start','',code))return Promise.resolve(null);
+  }
+  if(type==='combat-lease-redeem'){
+    const code=String(payload.code||'');
+    if(hasPendingServerAction('combat-lease-redeem','',code))return Promise.resolve(null);
+  }
   if(type==='world-pulse'&&hasPendingServerAction('world-pulse')){
     return Promise.resolve(null);
   }
 
   if(pendingServerActionCount()>=SERVER_ACTION_QUEUE_MAX){
     toast(
-      '☁ Order queue full',
-      'The connection is too far behind. Your latest order was not added.',
+      'Order queue full',
+      'Too many orders are pending. Your latest order was not added.',
       'bad'
     );
     return Promise.resolve(null);
@@ -3124,10 +3172,10 @@ async function flushServerSave(showToast,force=false){
 
     const status=$('serverStatus');
     if(status){
-      const verified=resultPowerText?(' · verified power <b class="gold">'+resultPowerText+'</b>'):'';
-      status.innerHTML='☁ <span class="grn">Synced</span> as <b class="gold">'+ACCOUNT.username+'</b>'+verified+'.';
+      const verified=resultPowerText?(' · power <b class="gold">'+resultPowerText+'</b>'):'';
+      status.innerHTML='💾 <span class="grn">Saved</span> as <b class="gold">'+ACCOUNT.username+'</b>'+verified+'.';
     }
-    if(showToast)toast('☁ Synced','Progress saved to the server.','grn');
+    if(showToast)toast('💾 Saved','Progress saved.','grn');
   }catch(error){
     ok=false;
     const status=$('serverStatus');
@@ -3136,16 +3184,16 @@ async function flushServerSave(showToast,force=false){
       saveConflict=true;
       saveDirty=false;
       clearTimeout(saveTimer);
-      if(status)status.innerHTML='<span class="red">Save conflict:</span> reload this page to use the canonical server save.';
+      if(status)status.innerHTML='<span class="red">Progress conflict:</span> reload this page to use the canonical saved progress.';
       toast('☁ Save conflict','This account changed in another tab or device. Reload before continuing so progress is not overwritten.','bad');
       if(!$('modalWrap').classList.contains('hidden'))closeModal();
       showModal('☁ SAVE CONFLICT',
-        '<p>The account was changed in another tab or device. Automatic saving has stopped to prevent overwriting the server copy.</p>'+ 
-        '<p class="small" style="margin-top:8px">Reload this page to continue from the canonical server save.</p>',
-        [{t:'Reload server save',fn:()=>location.reload()}]);
+        '<p>Progress changed in another tab or device. Automatic saving has paused.</p>'+ 
+        '<p class="small" style="margin-top:8px">Reload this page to continue from the latest progress.</p>',
+        [{t:'Reload progress',fn:()=>location.reload()}]);
     }else{
       saveDirty=true;
-      if(status)status.innerHTML='<span class="red">Sync failed:</span> '+htmlEscape(error.message);
+      if(status)status.innerHTML='<span class="red">Save failed:</span> '+htmlEscape(error.message);
       if(showToast)toast('☁ Save failed',error.message,'bad');
       else scheduleIdleSave(2500);
     }
@@ -3163,7 +3211,8 @@ async function flushServerSave(showToast,force=false){
 /* ================= derived math ================= */
 function lawM(){return LAWS[S.law];}
 const LIFE=[1,1.5,2.5,4,7,15];
-function lifespan(){return 600*LIFE[S.realm]*(hasLegend('hooh')?1.25:1)*(hasLegend('tapubulu')?1.12:1);}
+function lifespan(){return 600*LIFE[S.realm]*(hasLegend('hooh')?1.25:1)*(hasLegend('tapubulu')?1.12:1)*
+  (1+0.6*Math.min(1,share('droid')*3.333));}
 const THRONES=['Mortal Throne','Immortal Throne','Divine Throne'];
 function throneTier(){return META.prestiges>=8?2:META.prestiges>=3?1:0;}
 function unlockEnding(id,name){META.endings=META.endings||{};if(META.endings[id])return;
@@ -3175,12 +3224,37 @@ function logiBonus(){let b=0;for(const g of S.gens)if(g.spec==='logi')b+=supVal(
 function supVal(g){return RARITY[g.r].sup[g.spec==='econ'?0:1]*(1+0.1*(g.lvl-1));}
 function mpMult(){return (1+0.25*shopLvl('bloodline'))*lawM().mp*prodMult()*(hasLegend('hooh')?1.25:1)*(hasLegend('tapubulu')?1.22:1)*(S.ch.tiny?0.5:1);}
 function goldMult(){let m=(1+0.25*shopLvl('warchest'))*lawM().g*prodMult()*(1+econBonus());
-  if(S.tech.prop)m*=1.3;if(hasLegend('groudon'))m*=1.25;return m;}
+  if(S.tech.prop)m*=1.3;if(hasLegend('groudon'))m*=1.25;
+  m*=1-0.20*Math.min(1,share('destroyer')*10);
+  m*=1-0.14*Math.min(1,share('battlecruiser')*10);
+  m*=1-0.25*Math.min(1,share('dreadnought')*20);
+  return Math.max(0.1,m);}
 function casMult(){let m=REALMS[S.realm].cas*(1-0.1*shopLvl('ancestor'))*(1-logiBonus());
   m*=1-0.4*Math.min(1,share('snip')*2.5);
-  for(const t of TECHS)if(t.t==='cas'&&S.tech[t.id])m*=t.v;if(hasLegend('lugia'))m*=0.78;if(hasLegend('zygarde'))m*=0.90;if(hasLegend('tapufini'))m*=0.86;if(S.poke.specialForms.armoredMewtwo)m*=0.85;if(megaZygardeActive())m*=0.25;return Math.max(0.01,m);}
+  m*=1-0.20*Math.min(1,share('jedi')*10);
+  m*=1+0.12*Math.min(1,share('storm')*5);
+  m*=1+0.40*Math.min(1,share('sith')*10);
+  m*=1+0.18*Math.min(1,share('walker')*8);
+  m*=1+0.30*Math.min(1,share('dreadnought')*20);
+  const target=S.target?BY[S.target]:null;
+  if(target&&target.plane==='space'&&S.tech.spaceshield)m*=0.75;
+  if(target&&target.plane==='space'&&S.tech.quantumshield)m*=0.85;
+  for(const t of TECHS)if(t.t==='cas'&&S.tech[t.id])m*=t.v;
+  if(hasLegend('lugia'))m*=0.78;if(hasLegend('zygarde'))m*=0.90;if(hasLegend('tapufini'))m*=0.86;
+  if(S.poke.specialForms.armoredMewtwo)m*=0.85;if(megaZygardeActive())m*=0.25;
+  return Math.max(0.01,m);}
 function techPow(){let m=1;for(const t of TECHS)if(t.t==='pow'&&S.tech[t.id])m*=t.v;return m;}
-function defRed(){let r=0;for(const t of TECHS)if(t.t==='def'&&S.tech[t.id])r+=t.v;if(hasLegend('giratina'))r+=0.08;if(hasLegend('zygarde'))r+=0.07;if(hasLegend('lunala'))r+=0.05;if(S.poke.specialForms.shadowLugia)r+=0.12;if(megaZygardeActive())r+=0.25;return Math.min(0.75,r);}
+function defRed(){let r=0;for(const t of TECHS)if(t.t==='def'&&S.tech[t.id])r+=t.v;
+  const target=S.target?BY[S.target]:null;
+  if(target&&target.plane==='space'){
+    r+=0.05*Math.min(1,share('jedi')*10);
+    r+=0.12*Math.min(1,share('destroyer')*10);
+    r+=0.10*Math.min(1,share('walker')*8);
+    if(S.tech.spacetarget)r+=0.12;
+  }
+  if(hasLegend('giratina'))r+=0.08;if(hasLegend('zygarde'))r+=0.07;if(hasLegend('lunala'))r+=0.05;
+  if(S.poke.specialForms.shadowLugia)r+=0.12;if(megaZygardeActive())r+=0.25;
+  return Math.min(0.85,r);}
 function equipMult(){return 1+0.55*Math.log10(1+S.equip);}
 function cmdGen(){return S.gens.find(g=>g.id===S.cmd)||null;}
 function cmdMult(){const g=cmdGen();return g?RARITY[g.r].cmd*(1+0.08*(g.lvl-1)):1;}
@@ -3197,14 +3271,42 @@ const BRANCHES=[
  {id:'air',ico:'✈️',n:'Air Force',w:2.5,g:8,e:5,req:'air',
   d:'Fight at ×2.5 power. Air superiority doubles siege/storm caps and halves the annihilation threshold at full share.'},
  {id:'sf',ico:'🥷',n:'Special Forces',w:2,g:10,e:6,req:'guard',
-  d:'Fight at ×2 power. Shadow escorts: commander death risk −50% at 10% share.'}];
-function trainedSum(){const t=S.tr;return t.snip+t.armor+t.navy+t.air+t.sf;}
+  d:'Fight at ×2 power. Shadow escorts: commander death risk −50% at 10% share.'},
+ {id:'storm',ico:'⚪',n:'Storm Troopers',w:4.5,g:18,e:12,req:'stormtech',plane:'space',risk:true,
+  d:'Fight at ×4.5 power. Shock assault grants up to +25% space power. Risk: casualties rise by up to 12%.'},
+ {id:'droid',ico:'🤖',n:'Battle Droids',w:5,g:14,e:20,req:'droidtech',plane:'space',
+  d:'Fight at ×5 power. Synthetic reserves extend army lifespan by up to 60%.'},
+ {id:'jedi',ico:'🟦',n:'Jedi Knights',w:6,g:35,e:15,req:'forcetech',plane:'space',
+  d:'Fight at ×6 power. Battle meditation reduces casualties by up to 20% and enemy defence by up to 5% in space.'},
+ {id:'fighter',ico:'🛩️',n:'Starfighters',w:7.5,g:45,e:35,req:'fightertech',plane:'space',
+  d:'Fight at ×7.5 power. Starfighter cover raises space siege and storm caps by up to 35%.'},
+ {id:'destroyer',ico:'🚢',n:'Star Destroyers',w:13,g:120,e:90,req:'destroyertech',plane:'space',risk:true,
+  d:'Fight at ×13 power. Orbital bombardment cuts space defence by up to 12%. Risk: upkeep reduces gold income by up to 20%.'},
+ {id:'sith',ico:'🔴',n:'Sith Marauders',w:16,g:85,e:55,req:'forcetech',plane:'space',risk:true,
+  d:'Fight at ×16 power. Dark-side fury grants up to +30% space power. Risk: casualties rise by up to 40%.'},
+ {id:'cloneTrooper',ico:'🧬',n:'Clone Troopers',w:5.8,g:24,e:16,req:'clonetech',plane:'space',
+  d:'Fight at ×5.8 power. Standardized logistics increase equipment production by up to 18%.'},
+ {id:'mando',ico:'🪖',n:'Mandalorian Commandos',w:9,g:70,e:30,req:'mandotech',plane:'space',
+  d:'Fight at ×9 power. Beskar escorts reduce commander death risk by up to 35%.'},
+ {id:'walker',ico:'🦿',n:'Imperial Walkers',w:11.5,g:90,e:65,req:'walkertech',plane:'space',risk:true,
+  d:'Fight at ×11.5 power. Ground bombardment reduces space defence by up to 10%. Risk: casualties rise by up to 18%.'},
+ {id:'frigate',ico:'🛸',n:'Rebel Frigates',w:10,g:65,e:60,req:'frigatetech',plane:'space',
+  d:'Fight at ×10 power. Fleet screening increases space siege caps by up to 22%.'},
+ {id:'battlecruiser',ico:'🛰️',n:'Battlecruisers',w:20,g:180,e:130,req:'battlecruisertech',plane:'space',risk:true,
+  d:'Fight at ×20 power. Heavy batteries grant up to +22% space power. Risk: gold income falls by up to 14%.'},
+ {id:'dreadnought',ico:'🌌',n:'Galactic Dreadnoughts',w:32,g:420,e:300,req:'dreadtech',plane:'space',risk:true,
+  d:'Fight at ×32 power. Supreme firepower grants up to +45% space power. Risk: casualties +30% and gold income −25%.'}];
+function trainedSum(){return BRANCHES.reduce((sum,b)=>sum+(Number(S.tr[b.id])||0),0);}
 function infantry(){return Math.max(0,S.mp-trainedSum());}
 function share(id){return S.mp>0?(S.tr[id]||0)/S.mp:0;}
 function clampTrained(){const su=trainedSum();if(su<=S.mp)return;
   const f=S.mp>0?S.mp/su:0;for(const k in S.tr)S.tr[k]*=f;}
-function branchLocked(b){if(b.req&&!S.tech[b.req])return'Needs '+TECHS.find(t=>t.id===b.req).n;
-  if(b.reqConq&&conqCount()<b.reqConq)return'Needs '+b.reqConq+' territories';return null;}
+function branchLocked(b){
+  if(b.plane&&!planeUnlockedId(b.plane))return'Needs '+PLANES[planeIdx(b.plane)].n;
+  if(b.req&&!S.tech[b.req])return'Needs '+TECHS.find(t=>t.id===b.req).n;
+  if(b.reqConq&&conqCount()<b.reqConq)return'Needs '+b.reqConq+' territories';
+  return null;
+}
 function trainCostB(b,n){return{g:b.g*Math.pow(n,0.8),e:b.e*Math.pow(n,0.6)};}
 async function trainBranch(id,frac){
   const b=BRANCHES.find(x=>x.id===id);if(!b)return;
@@ -3218,9 +3320,28 @@ async function disbandBranch(id){
   await runServerAction('disband-branch',{id},true);
 }
 function annThresh(){return 250/(1+1.5*Math.min(1,share('air')));}
+function spaceUnitPowerMult(target){
+  if(!target||target.plane!=='space')return 1;
+  let m=1;
+  m*=1+0.25*Math.min(1,share('storm')*5);
+  m*=1+0.30*Math.min(1,share('sith')*10);
+  m*=1+0.22*Math.min(1,share('battlecruiser')*10);
+  m*=1+0.45*Math.min(1,share('dreadnought')*20);
+  if(S.tech.fleetai)m*=1.2;
+  m*=1+0.02*Math.min(50,Number(S.b.orb)||0);
+  return m;
+}
+function spaceSiegeCapMult(target){
+  if(!target||target.plane!=='space')return 1;
+  let m=1+0.35*Math.min(1,share('fighter')*5);
+  m*=1+0.22*Math.min(1,share('frigate')*8);
+  if(S.tech.spacewarp)m*=1.5;
+  return m;
+}
 function armyPower(){const t=S.tr;
-  const eff=infantry()+t.snip*1.5+t.navy*2+t.sf*2+t.air*2.5+t.armor*3;
-  const target=S.target?BY[S.target]:null;return eff*powAll()*pokeMultFor(target);}
+  const eff=infantry()+BRANCHES.reduce((sum,b)=>sum+(Number(t[b.id])||0)*b.w,0);
+  const target=S.target?BY[S.target]:null;
+  return eff*powAll()*pokeMultFor(target)*spaceUnitPowerMult(target);}
 function clickPow(){return (1+S.b.bar)*lawM().mp*(1+shopLvl('presence'))*(hasLegend('reshiram')?2:1)*(hasLegend('tapukoko')?1.3:1)*(S.ch.tiny?0.5:1);}
 function rates(){
   let mps=0,gps=0,eps=0,qps=0,mana=0;const now=Date.now();
@@ -3233,7 +3354,14 @@ function rates(){
   const home=CBY[S.startCode];
   if(home&&!(S.rebels[home.code]>now))mps+=home.pop*0.05;
   mps+=S.b.off*0.5;gps+=S.b.civ*8;
-  eps+=S.b.mil*3*prodMult()*(1+0.5*shopLvl('quartermaster'))*(hasLegend('kyogre')?1.3:1)*(hasLegend('zekrom')?1.35:1);
+  const spaceMult=S.tech.spaceprod?1.5:1;
+  if(planeUnlockedId('space')){
+    mps+=(Number(S.b.clone)||0)*6*spaceMult;
+    gps+=(Number(S.b.reactor)||0)*40*spaceMult;
+  }
+  eps+=(S.b.mil*3+((Number(S.b.orb)||0)*12+(Number(S.b.reactor)||0)*4)*spaceMult)*
+    prodMult()*(1+0.5*shopLvl('quartermaster'))*
+    (1+0.18*Math.min(1,share('cloneTrooper')*8))*(hasLegend('kyogre')?1.3:1)*(hasLegend('zekrom')?1.35:1);
   if(magicUnlocked()){mana+=S.b.aca*6+S.b.well*30;mana*=(1+0.4*shopLvl('manaflow'))*prodMult()*(hasLegend('kyogre')?1.2:1)*(hasLegend('tapufini')?1.15:1);}else mana=0;
   if(cultUnlocked()){qps+=S.b.shrine*8;qps*=(1+0.25*S.realm)*(1+0.4*shopLvl('dao'))*prodMult();}else qps=0;
   return{mps:mps*mpMult(),gps:gps*goldMult(),eps,qps,mana};}
@@ -3242,7 +3370,8 @@ function aliveAllies(c){if(!c.bloc)return 0;let n=0;
 function pactActive(b){return S.pacts[b]>Date.now();}
 function resFactor(){return Math.pow(1.022,Math.max(0,conqCount()-1));}
 let COMBAT_VISUAL_HP={};
-let LOCAL_LOOTING={};
+let COMBAT_LEASES={};
+let LOCAL_CONQUESTS={};
 let targetIntentSeq=0,targetIntentCode='',targetIntentPending=false,targetIntentKnown=false;
 function noteTargetIntent(code){
   targetIntentSeq+=1;
@@ -3263,7 +3392,7 @@ function restoreLatestTargetIntent(batch){
   if(!S||!targetIntentKnown)return;
   const acknowledged=batchTargetIntentSeq(batch);
   const intended=targetIntentCode;
-  if(intended&&((S.conq&&S.conq[intended])||LOCAL_LOOTING[intended])){
+  if(intended&&(S.conq&&S.conq[intended])){
     targetIntentCode='';
     targetIntentPending=false;
     S.target=null;
@@ -3272,53 +3401,152 @@ function restoreLatestTargetIntent(batch){
   S.target=intended||null;
   if(acknowledged>=targetIntentSeq)targetIntentPending=false;
 }
-function isLooting(code){return !!LOCAL_LOOTING[String(code||'')];}
-function lootingProgress(code,now=Date.now()){
-  const entry=LOCAL_LOOTING[code];if(!entry)return 0;
-  const elapsed=Math.max(0,now-Number(entry.startedAt||now));
-  return Math.min(94,8+86*(1-Math.exp(-elapsed/1500)));
+function combatLease(code){
+  return COMBAT_LEASES[String(code||'')]||null;
 }
-function beginLooting(code){
-  code=String(code||'');const country=BY[code];
+function isLocalConquest(code){
+  return !!LOCAL_CONQUESTS[String(code||'')];
+}
+function leaseVisualRemaining(code,now=Date.now()){
+  const lease=combatLease(code);
+  if(!lease)return null;
+  const duration=Math.max(0.05,Number(lease.duration)||0.05);
+  const elapsed=Math.max(0,(now-Number(lease.issuedAt||now))/1000);
+  const progress=Math.min(1,elapsed/duration);
+  return Math.max(0.000001,Number(lease.remaining||1)*(1-progress));
+}
+function applyLocalConquest(code){
+  code=String(code||'');
+  const country=BY[code];
   if(!country||S.conq[code])return false;
-  if(!LOCAL_LOOTING[code])LOCAL_LOOTING[code]={startedAt:Date.now(),heartbeatAt:0};
+
+  LOCAL_CONQUESTS[code]=LOCAL_CONQUESTS[code]||{
+    leaseId:String(combatLease(code)&&combatLease(code).leaseId||''),
+    startedAt:Date.now()
+  };
+
+  S.conq=optimisticObject(S.conq);
+  S.conq[code]=1;
+  S.hp=optimisticObject(S.hp);
+  delete S.hp[code];
   COMBAT_VISUAL_HP[code]=0.000001;
+
   if(S.target===code){
-    targetIntentCode='';targetIntentPending=false;targetIntentKnown=true;S.target=null;
+    noteTargetIntent('');
+    S.target=null;
   }
-  rebuildCard(code);updateMapTerritory(code);refreshTargets();updateRegionTabs();
+
+  rebuildCard(code);
+  updateMapTerritory(code);
+  refreshTargets();
+  updateRegionTabs();
+  renderPlaneRow();
   return true;
 }
-function clearLooting(code){delete LOCAL_LOOTING[String(code||'')];}
-function reconcileLootingState(){
+function replayLocalConquests(){
   if(!S)return;
-  for(const code of Object.keys(LOCAL_LOOTING)){
-    if(S.conq[code]){clearLooting(code);clearCombatVisual(code);}
-  }
-}
-function updateLootingCard(code,now=Date.now()){
-  const R=CARDS[code];if(!R||!LOCAL_LOOTING[code])return;
-  const p=lootingProgress(code,now);
-  if(R.lootBar)R.lootBar.style.width=p.toFixed(1)+'%';
-  if(R.lootPercent)R.lootPercent.textContent=Math.floor(p)+'%';
-}
-function updateLootingVisuals(now=Date.now()){
-  for(const code of Object.keys(LOCAL_LOOTING)){
-    if(S&&S.conq[code]){
-      clearLooting(code);rebuildCard(code);updateMapTerritory(code);continue;
-    }
-    updateLootingCard(code,now);
-    const entry=LOCAL_LOOTING[code];
-    if(entry&&now-Number(entry.heartbeatAt||0)>=320&&!hasPendingServerAction('attack','siege',code)){
-      entry.heartbeatAt=now;queueSiegeHeartbeat(code,true);
+  for(const code of Object.keys(LOCAL_CONQUESTS)){
+    if(S.conq&&S.conq[code]){
+      S.conq[code]=1;
+      S.hp=optimisticObject(S.hp);
+      delete S.hp[code];
     }
   }
 }
+function confirmLocalConquest(code){
+  code=String(code||'');
+  delete LOCAL_CONQUESTS[code];
+  delete COMBAT_LEASES[code];
+  clearCombatVisual(code);
+}
+function rollbackLocalConquest(code){
+  code=String(code||'');
+  delete LOCAL_CONQUESTS[code];
+  delete COMBAT_LEASES[code];
+  if(optimisticCanonicalS){
+    S=copyJson(optimisticCanonicalS);
+    META=copyJson(optimisticCanonicalMeta||META);
+    rebuildOptimisticState();
+  }
+  rebuildCard(code);
+  updateMapTerritory(code);
+  refreshTargets();
+  updateRegionTabs();
+  updateTop();
+}
+function storeCombatLease(result){
+  const lease=result&&result.result&&result.result.lease
+    ?result.result.lease
+    :result&&result.lease
+    ?result.lease
+    :null;
+  if(!lease||!lease.code||!lease.leaseId)return null;
+
+  const code=String(lease.code);
+  COMBAT_LEASES[code]={
+    leaseId:String(lease.leaseId),
+    code,
+    issuedAt:Number(lease.issuedAt)||Date.now(),
+    expiresAt:Number(lease.expiresAt)||Date.now()+120000,
+    duration:Math.max(0.05,Number(lease.duration)||0.05),
+    remaining:Math.max(0.000001,Number(lease.remaining)||0.000001),
+    maximum:Math.max(1,Number(lease.maximum)||1)
+  };
+
+  const predicted=leaseVisualRemaining(code);
+  if(predicted!==null){
+    COMBAT_VISUAL_HP[code]=Math.min(
+      Number(COMBAT_VISUAL_HP[code])||Number(lease.remaining),
+      predicted
+    );
+  }
+
+  if(isLocalConquest(code))redeemCombatLease(code);
+  return COMBAT_LEASES[code];
+}
+function redeemCombatLease(code){
+  code=String(code||'');
+  const lease=combatLease(code);
+  if(!lease||lease.redeeming)return;
+  lease.redeeming=true;
+
+  const earliest=Number(lease.issuedAt)+Number(lease.duration)*1000;
+  const delay=Math.max(0,earliest-Date.now());
+
+  setTimeout(()=>{
+    void runServerAction(
+      'combat-lease-redeem',
+      {leaseId:lease.leaseId,code},
+      true
+    ).then(result=>{
+      if(!result){
+        lease.redeeming=false;
+        return;
+      }
+      const combat=result.result||{};
+      if(combat.conquered){
+        confirmLocalConquest(code);
+        showCombatResult(result,true);
+      }else{
+        lease.redeeming=false;
+        rollbackLocalConquest(code);
+      }
+    });
+  },delay);
+}
+
 function canonicalDefenseRemaining(c){
   return (S.hp[c.code]!==undefined)?Number(S.hp[c.code]):defOf(c);
 }
 function displayedDefenseRemaining(c){
-  if(isLooting(c.code))return 0.000001;
+  if(isLocalConquest(c.code))return 0.000001;
+  const leased=leaseVisualRemaining(c.code);
+  if(leased!==null&&S.target===c.code){
+    COMBAT_VISUAL_HP[c.code]=Math.min(
+      Number(COMBAT_VISUAL_HP[c.code])||canonicalDefenseRemaining(c),
+      leased
+    );
+  }
   const canonical=canonicalDefenseRemaining(c);
   if(S.target!==c.code||COMBAT_VISUAL_HP[c.code]===undefined)return canonical;
   return Math.min(canonical,Math.max(0.000001,Number(COMBAT_VISUAL_HP[c.code])||canonical));
@@ -3364,7 +3592,7 @@ function enqueueMobilizeClick(){
   let command=queuedMobilizeCommand();
   if(!command){
     if(pendingServerActionCount()>=SERVER_ACTION_QUEUE_MAX){
-      toast('☁ Order queue full','The connection is too far behind. This click was not added.','bad');
+      toast('Order queue full','The connection is too far behind. This click was not added.','bad');
       return false;
     }
     command={
@@ -3441,43 +3669,65 @@ function entrench(c,info){return defOf(c)*info.aF*info.fx*(info.rs||1)*(1-defRed
 let serverCombatAcc=0,autoTargetAt=0,localCombatPaintAcc=0;
 
 function predictLiveSiege(rawDt){
-  if(!S||!S.target||S.conq[S.target]||isLooting(S.target)||S.mp<1)return;
-  const country=BY[S.target];if(!country||canSiege(country))return;
-  const speed=[0,1,2,4].includes(Number(S.speed))?Number(S.speed):1;if(speed<=0)return;
-  const dt=Math.max(0,rawDt)*speed;if(dt<=0)return;
-  const info=effInfo(country),power=armyPower(),airShare=Math.min(1,share('air'));
-  const damage=Math.min(
-    power*siegeRate()*(1+0.2*shopLvl('timeworn'))*dt,
-    entrench(country,info)*0.08*(1+airShare)*dt
-  );
-  if(damage<=0||info.rem<=0)return;
-  const multiplier=info.eff/Math.max(1e-12,info.rem);
-  const next=Math.max(0,info.rem-damage/Math.max(1e-12,multiplier));
+  if(!S||!S.target||S.conq[S.target]||isLocalConquest(S.target)||S.mp<1)return;
+  const country=BY[S.target];
+  if(!country||canSiege(country))return;
+
+  const lease=combatLease(country.code);
+  let next;
+
+  if(lease){
+    next=leaseVisualRemaining(country.code);
+  }else{
+    const speed=[0,1,2,4].includes(Number(S.speed))?Number(S.speed):1;
+    if(speed<=0)return;
+    const dt=Math.max(0,rawDt)*speed;
+    if(dt<=0)return;
+    const info=effInfo(country),power=armyPower(),airShare=Math.min(1,share('air'));
+    const damage=Math.min(
+      power*siegeRate()*(1+0.2*shopLvl('timeworn'))*dt,
+      entrench(country,info)*0.08*(1+airShare)*spaceSiegeCapMult(country)*dt
+    );
+    if(damage<=0||info.rem<=0)return;
+    const multiplier=info.eff/Math.max(1e-12,info.rem);
+    next=Math.max(0,info.rem-damage/Math.max(1e-12,multiplier));
+  }
+
+  if(next===null||next===undefined)return;
+
   if(next<=Math.max(0.000001,defOf(country)*0.00015)){
     COMBAT_VISUAL_HP[country.code]=0.000001;
-    beginLooting(country.code);
-    queueSiegeHeartbeat(country.code,true);
+    applyLocalConquest(country.code);
+    redeemCombatLease(country.code);
     return;
   }
+
   COMBAT_VISUAL_HP[country.code]=next;
   localCombatPaintAcc+=Math.max(0,rawDt);
   if(localCombatPaintAcc>=0.05){
-    localCombatPaintAcc=0;updateCard(country.code);updateMapTerritory(country.code);
+    localCombatPaintAcc=0;
+    updateCard(country.code);
+    updateMapTerritory(country.code);
   }
 }
-function queueSiegeHeartbeat(code,background=false){
+
+function requestCombatLease(code){
   code=String(code||'');
-  if(!code||!S||S.conq[code])return;
-  if(!background&&S.target!==code)return;
-  if(background&&!isLooting(code))return;
-  if(hasPendingServerAction('attack','siege',code))return;
-  void runServerAction('attack',{mode:'siege',code,background:!!background},true).then(result=>{
-    if(result)showCombatResult(result,true);
-    if(isLooting(code)&&!S.conq[code]){
-      const entry=LOCAL_LOOTING[code];if(entry)entry.heartbeatAt=0;
-    }
+  if(!code||!S||S.conq[code]||combatLease(code))return;
+  if(hasPendingServerAction('combat-lease-start','',code))return;
+
+  void runServerAction(
+    'combat-lease-start',
+    {code},
+    true
+  ).then(result=>{
+    if(!result)return;
+    storeCombatLease(result);
+    updateCard(code);
+    updateMapTerritory(code);
   });
 }
+
 function removeQueuedSiegeOrders(keepCode=''){
   const kept=[];
   for(const command of serverActionQueue){
@@ -3497,10 +3747,6 @@ function removeQueuedSiegeOrders(keepCode=''){
 function selectAttackTargetInstantly(code){
   const country=BY[code];
   if(!country||S.conq[code])return false;
-  if(isLooting(code)){
-    toast('📦 Looting '+country.name,'The territory is secured. Rewards are being verified.','');
-    return false;
-  }
   const gate=canSiege(country);
   if(gate){toast('🔒 '+country.name,gate,'bad');return false;}
 
@@ -3534,11 +3780,9 @@ function selectAttackTargetInstantly(code){
 async function setSiege(code){
   const changed=String(S&&S.target||'')!==String(code||'');
   if(!selectAttackTargetInstantly(code))return;
-  // Starting a new siege gets immediate visual movement. Re-clicking the same
-  // target does not manufacture extra siege time or reset its defence.
   if(changed)predictLiveSiege(0.05);
   serverCombatAcc=0;
-  queueSiegeHeartbeat(code);
+  requestCombatLease(code);
 }
 
 async function toggleSiege(code){
@@ -3562,19 +3806,15 @@ function showCombatResult(envelope,quiet){
   if(r.casualties>0&&!quiet)toast('🩸 Battlefield losses',fmt(Number(r.casualties))+' soldiers were lost.','bad');
   if(r.commanderAtRisk)toast('⚠️ Commander at risk',r.commanderAtRisk.name+' is fighting far above your weight.','bad');
   if(r.promoted)toast('🎖️ Promotion',r.promoted.name+' reached level '+r.promoted.lvl+'.','grn');
-  if(r.generalLost){sfx('death');showModal('⚰️ A GENERAL HAS FALLEN','<p><b>'+htmlEscape(r.generalLost.title+' '+r.generalLost.name)+'</b> died leading the assault.</p><p class="small" style="margin-top:8px">The server recorded this permanent loss.</p>',[{t:'Honor the fallen'}]);}
+  if(r.generalLost){sfx('death');showModal('⚰️ A GENERAL HAS FALLEN','<p><b>'+htmlEscape(r.generalLost.title+' '+r.generalLost.name)+'</b> died leading the assault.</p><p class="small" style="margin-top:8px">Their name is entered in the memorial rolls.</p>',[{t:'Honor the fallen'}]);}
   if(r.conquered&&c){
-    clearLooting(r.code);
+    confirmLocalConquest(r.code);
     toast('🏳️ '+c.name+' has fallen','Loot '+fmt(Number(r.loot)||0)+' gold · '+fmt(Number(r.recruits)||0)+' recruits rally to you','grn');
     sfx('conq');confettiAtCard(c.code);rebuildCard(c.code);renderPacts();updateRegionTabs();renderPlaneRow();
     if(r.regionCleared)toast('🌍 '+(r.regionName||r.regionCleared)+' UNIFIED','Regional command grants +10% army power and '+fmt(Number(r.regionBonus)||0)+' gold.','grn');
-    if(r.planeCleared)toast('🌀 '+String(r.planeCleared).toUpperCase()+' IS YOURS','The next plane has been unlocked by the server.','cyan');
+    if(r.planeCleared)toast('🌀 '+String(r.planeCleared).toUpperCase()+' IS YOURS','A path to the next plane has opened.','cyan');
     if(r.won)showVictory();
   }else if(!quiet&&r.damage>0)sfx('hit');
-  if(!r.conquered&&r.code&&isLooting(r.code)){
-    const entry=LOCAL_LOOTING[r.code];if(entry)entry.heartbeatAt=0;
-    updateLootingCard(r.code);
-  }
   if(r.conquered){
     clearCombatVisual(r.code);
     refreshTargets();updateCards();updateMap();updateRegionTabs();updateTop();
@@ -3599,20 +3839,9 @@ async function burst(code,quiet){
 }
 function combatTick(dt){
   if(AUTHORITY_PHASE<3||!S.target||S.conq[S.target]||S.mp<1)return;
-  serverCombatAcc+=Math.max(0,dt);
-  if(serverCombatAcc<0.5)return;
-  const code=S.target;
-  if(hasPendingServerAction('attack','siege',code))return;
-  serverCombatAcc=0;
-  queueSiegeHeartbeat(code);
+  predictLiveSiege(dt);
+  if(!combatLease(S.target))requestCombatLease(S.target);
 }
-let combatFrameAt=performance.now();
-function combatVisualFrame(now){
-  const dt=clamp((now-combatFrameAt)/1000,0,0.1);combatFrameAt=now;
-  if(S&&!document.hidden){predictLiveSiege(dt);updateLootingVisuals(Date.now());}
-  requestAnimationFrame(combatVisualFrame);
-}
-requestAnimationFrame(combatVisualFrame);
 
 // Legacy local combat mutators stay disabled. Combat, commanders and spells are server-authoritative.
 function applyCasualties(){return 0;}
@@ -3662,7 +3891,7 @@ function killGeneral(g,c){S.gens=S.gens.filter(x=>x.id!==g.id);
   if(S.cmd===g.id)S.cmd=null;S.st.gensLost++;sfx('death');
   showModal('⚰️ A GENERAL HAS FALLEN',
     '<p><b>'+g.title+' '+g.name+'</b> — '+RARITY[g.r].n+', level '+g.lvl+' — died leading the assault on <b>'+
-    (c?c.flag+' '+c.name:'the front')+'</b>.</p><p class="small" style="margin-top:8px">"'+g.bio+
+    (c?c.name:'the front')+'</b>.</p><p class="small" style="margin-top:8px">"'+g.bio+
     '"</p><p class="small" style="margin-top:8px">The dead do not return. Praetorian Guard research and higher realms lower this risk; striking far above your power raises it.</p>',
     [{t:'Honor the fallen'}]);
   renderGenerals();}
@@ -3688,7 +3917,7 @@ async function castSpell(id){
   const sp=SPELLS.find(x=>x.id===id);if(!sp||!magicUnlocked())return;
   const envelope=await runServerAction('cast-spell',{id},true);if(!envelope||!envelope.result)return;
   const r=envelope.result;sfx('realm');
-  if(id==='fire'){toast('🔥 FIRESTORM',fmt(Number(r.damage)||0)+' server-verified arcane damage.','cyan');showCombatResult(envelope,false);}
+  if(id==='fire'){toast('🔥 FIRESTORM',fmt(Number(r.damage)||0)+' confirmed arcane damage.','cyan');showCombatResult(envelope,false);}
   else if(id==='shield')toast('🛡️ ARCANE WARD','Your legions are protected for 60 seconds.','cyan');
   else if(id==='mind')toast('🧠 MIND FRACTURE','The target permanently loses 20% of its remaining defense.','cyan');
   else if(id==='summon')toast('🜂 SUMMONING CIRCLE','Spirit legions double server combat power for 45 seconds.','cyan');
@@ -3703,7 +3932,7 @@ function realmCost(i){return Math.floor(REALMS[i].cost*Math.max(0,1-0.2*shopLvl(
 async function advanceRealm(){const nxt=REALMS[S.realm+1];if(!nxt||S.realm<1)return;
   const result=await runServerAction('advance-realm',{},true);if(!result||!result.result)return;
   sfx('realm');toast('☯️ BREAKTHROUGH','You ascend to '+REALMS[S.realm].n+'. '+REALMS[S.realm].d,'cyan');
-  if(result.result.ending)toast('🏵 TRUE ENDING','“'+result.result.ending.name+'” is inscribed in the server record.','grn');}
+  if(result.result.ending)toast('🏵 TRUE ENDING','“'+result.result.ending.name+'” is inscribed in the imperial record.','grn');}
 
 /* ================= prestige ================= */
 function startTierCap(){return Math.min(9,1+2*META.prestiges);}
@@ -3753,7 +3982,7 @@ function presentWorldResult(envelope){
     if(r.event.kind==='gold')toast('🪙 Trade windfall','+'+fmt(Number(r.event.amount)||0)+' gold flows into the treasury.','grn');
     else if(r.event.kind==='manpower')toast('🪖 Volunteer surge','+'+fmt(Number(r.event.amount)||0)+' recruits answer the call.','grn');
     else if(r.event.kind==='qi')toast('☯️ Ley-line surge','+'+fmt(Number(r.event.amount)||0)+' Qi wells up from the land.','cyan');
-    else if(r.event.kind==='discount')toast('💡 Breakthrough','A server-verified technology discount is ready.','cyan');
+    else if(r.event.kind==='discount')toast('💡 Breakthrough','A confirmed technology discount is ready.','cyan');
   }
   if(r.raid)toast('🚨 BORDER RAID','Vengeful '+(BY[r.raid.country]?BY[r.raid.country].name:r.raid.country)+' strikes your lines — '+fmt(Number(r.raid.loss)||0)+' soldiers lost.','bad');
   if(r.rift){
@@ -3950,22 +4179,21 @@ function buildMap(){const svg=$('worldMap');if(!svg||!S)return;svg.innerHTML='';
     if(c.code===S.startCode)svgEl(svg,'circle',{cx:xy[0],cy:xy[1],r:rr+3,class:'homering'});
     const m=svgEl(svg,'circle',{cx:xy[0],cy:xy[1],r:rr,class:'mk'});
     const t=document.createElementNS(SVGNS,'title');
-    t.textContent=c.flag+' '+c.name+' — T'+c.tier+' · def '+fmt(defOf(c));m.appendChild(t);
-    m.addEventListener('click',()=>{if(MDRAG.moved||!S||S.conq[c.code]||isLooting(c.code))return;
+    t.textContent=c.name+' — T'+c.tier+' · def '+fmt(defOf(c));m.appendChild(t);
+    m.addEventListener('click',()=>{if(MDRAG.moved||!S||S.conq[c.code])return;
       void toggleSiege(c.code);});
     MREFS[c.code]=m;}
   updateMap();}
 function updateMapTerritory(code){
   if(!S)return;
   const m=MREFS[code],c=BY[code];if(!m||!c)return;
-  let fill='#6e7a63';const gated=!S.conq[code]&&!isLooting(code)&&!!canSiege(c);
+  let fill='#6e7a63';const gated=!S.conq[code]&&!!canSiege(c);
   if(S.conq[code])fill='#5a9e58';
-  else if(isLooting(code))fill='#c9a227';
-  else if(gated)fill='#3a4133';
+    else if(gated)fill='#3a4133';
   else if(S.hp[code]!==undefined||COMBAT_VISUAL_HP[code]!==undefined||S.target===code)fill='#c0463c';
   m.setAttribute('fill',fill);
   m.classList.toggle('gated',gated);
-  m.classList.toggle('tg',S.target===code&&!S.conq[code]&&!isLooting(code));
+  m.classList.toggle('tg',S.target===code&&!S.conq[code]);
 }
 function updateMap(){if(!S)return;for(const code in MREFS)updateMapTerritory(code);}
 
@@ -3989,39 +4217,33 @@ function buildGrid(){const g=$('grid');g.innerHTML='';CARDS={};
   for(const c of list){const el=document.createElement('div');el.dataset.code=c.code;
     g.appendChild(el);CARDS[c.code]={el};fillCard(c.code);}}
 function fillCard(code){const c=BY[code],R=CARDS[code],el=R.el;
-  const looting=isLooting(code);
-  el.className='cc'+(S.conq[code]?' done':looting?' looting':'');
+  el.className='cc'+(S.conq[code]?' done':'');
   if(S.conq[code]){
-    el.innerHTML='<div class="hd"><span class="flag">'+c.flag+'</span><span class="nm">'+c.name+
+    el.innerHTML='<div class="hd"><span class="flag">'+countryFlagMarkup(c)+'</span><span class="nm">'+c.name+
       '</span><span class="tier">T'+c.tier+'</span></div>'+
       (code===S.startCode?'<span class="home">HOME</span>':'<span class="rebel hidden">REBELLION</span>')+
       '<div class="occ">■ OCCUPIED</div><div class="inc"></div>';
     R.rebel=el.querySelector('.rebel');R.inc=el.querySelector('.inc');
-    R.bar=R.eff=R.cas=R.btn=R.eta=R.lootBar=R.lootPercent=null;
-  }else if(looting){
-    el.innerHTML='<div class="hd"><span class="flag">'+c.flag+'</span><span class="nm">'+c.name+
-      '</span><span class="tier">T'+c.tier+'</span></div>'+
-      '<div class="loot-title">■ TERRITORY SECURED</div>'+
-      '<div class="loot-note">Looting · server calculating rewards</div>'+
-      '<div class="lootbar"><i></i></div><div class="loot-percent">8%</div>';
-    R.lootBar=el.querySelector('.lootbar i');R.lootPercent=el.querySelector('.loot-percent');
-    R.rebel=R.inc=R.bar=R.eff=R.cas=R.eta=R.btn=null;updateLootingCard(code);
+    R.bar=R.eff=R.cas=R.btn=R.eta=null;
   }else{
-    el.innerHTML='<div class="hd" title="Set as auto-assault target"><span class="flag">'+c.flag+
+    el.innerHTML='<div class="hd" title="Set as auto-assault target"><span class="flag">'+countryFlagMarkup(c)+
       '</span><span class="nm">'+c.name+'</span><span class="tier">T'+c.tier+'</span></div>'+
       (c.bloc?'<span class="bloc">'+BLOCS[c.bloc]+'</span>':'')+
       (c.ptype?'<span class="ptype">'+PTYPES[c.ptype]+'</span>':'')+
       '<div class="bar"><i></i></div>'+
       '<div class="stats"><span class="eff"></span><span class="cas"></span><span class="eta"></span></div>'+
       '<button class="atk">⚔ Assault</button>';
-    R.bar=el.querySelector('.bar i');R.eff=el.querySelector('.eff');R.cas=el.querySelector('.cas');
-    R.eta=el.querySelector('.eta');R.btn=el.querySelector('.atk');R.rebel=R.inc=null;
-    R.lootBar=R.lootPercent=null;
-    el.querySelector('.hd').onclick=()=>{void toggleSiege(code);};R.btn.onclick=()=>burst(code);}
-  applyFilterOne(code);refreshTargets();}
+    R.bar=el.querySelector('.bar i');R.eff=el.querySelector('.eff');
+    R.cas=el.querySelector('.cas');R.eta=el.querySelector('.eta');
+    R.btn=el.querySelector('.atk');R.rebel=null;R.inc=null;
+    el.querySelector('.hd').onclick=()=>{void toggleSiege(code);};
+    R.btn.onclick=()=>burst(code);
+  }
+  applyFilterOne(code);refreshTargets();
+}
 function rebuildCard(code){if(CARDS[code])fillCard(code);}
 function refreshTargets(){for(const k in CARDS)
-  CARDS[k].el.classList.toggle('target',!!S&&S.target===k&&!S.conq[k]&&!isLooting(k));
+  CARDS[k].el.classList.toggle('target',!!S&&S.target===k&&!S.conq[k]);
   updateMap();}
 function applyFilterOne(code){const c=BY[code];
   const ok=(S.plane!=='earth'||VIEW==='ALL'||c.region===VIEW)&&(!Q||c.name.toLowerCase().includes(Q));
@@ -4047,11 +4269,10 @@ function updateRegionTabs(){const w=$('regionTabs');if(!w.children.length)return
   $('regionMile').textContent=cl.length?('Unified: '+cl.join(', ')+' · +10% power each')
     :'Unify a whole region for +10% army power';}
 function weakestFoe(){let best=null,bv=Infinity;
-  for(const c of ALLT){if(S.conq[c.code]||isLooting(c.code)||canSiege(c))continue;
+  for(const c of ALLT){if(S.conq[c.code]||canSiege(c))continue;
     const e=effInfo(c).eff;if(e<bv){bv=e;best=c.code;}}return best;}
 function updateCard(code,now=Date.now()){
   const R=CARDS[code],c=BY[code];if(!R||!c)return;
-  if(isLooting(code)){updateLootingCard(code,now);return;}
   if(S.conq[code]){
     if(R.rebel)R.rebel.classList.toggle('hidden',!(S.rebels[code]>now));
     if(R.inc){const paused=S.rebels[code]>now;
@@ -4070,7 +4291,7 @@ function updateCard(code,now=Date.now()){
   const AP=armyPower(),ent=entrench(c,info);
   if(AP>=ent*annThresh()){R.eta.textContent='⚡ instant';
     R.btn.disabled=S.mp<1;R.btn.textContent='💥 Annihilate';return;}
-  const dps=Math.min(AP*siegeRate(),ent*0.08*(1+Math.min(1,share('air'))));
+  const dps=Math.min(AP*siegeRate(),ent*0.08*(1+Math.min(1,share('air')))*spaceSiegeCapMult(c));
   const eta=dps>0?info.eff/dps:Infinity;
   R.eta.textContent='⏱ '+(eta>36000?'∞':timeFmt(eta));
   R.btn.disabled=S.mp<1;
@@ -4085,6 +4306,8 @@ let BREFS={},TREFS={},PREFS={},SHREFS={},BRREFS={};
 function renderBranches(){const g=$('branchGrid');if(!g)return;g.innerHTML='';BRREFS={};
   for(const b of BRANCHES){const d=document.createElement('div');d.className='oc';
     d.innerHTML='<div class="hd"><span class="ico">'+b.ico+'</span>'+b.n+
+      (b.plane==='space'?'<span class="ptype">SPACE</span>':'')+
+      (b.risk?'<span class="rebel">HIGH RISK</span>':'')+
       '<span class="lvl"><span class="cnt"></span></span></div>'+
       '<div class="ds">'+b.d+'<span class="small lockmsg" style="display:block;color:var(--blood-hi)"></span></div>'+
       '<div class="rowbtns" style="margin:0">'+
@@ -4114,6 +4337,7 @@ function updateBranches(){if(!S)return;
       btn.disabled=!!lk||n<1||S.gold<c.g||S.equip<c.e;});}}
 function renderBuildings(){const g=$('buildGrid');g.innerHTML='';BREFS={};
   for(const b of BUILDINGS){
+    if(b.plane==='space'&&!planeUnlockedId('space'))continue;
     if(b.plane==='magic'&&!magicUnlocked())continue;
     if(b.plane==='cult'&&!cultUnlocked())continue;
     const d=document.createElement('div');d.className='oc';
@@ -4162,7 +4386,7 @@ function renderPacts(){const g=$('pactGrid');g.innerHTML='';PREFS={};
     d.innerHTML='<div class="hd"><span class="ico">🤝</span>'+BLOCS[b]+
       '<span class="lvl">'+alive.length+' standing</span></div><div class="ds">'+
       'Members reinforce each other: +22% defense per living ally (up to ×1.88). '+
-      (alive.length?('Standing: '+alive.slice(0,7).map(c=>c.flag).join(' ')+(alive.length>7?' …':''))
+      (alive.length?('Standing: '+alive.slice(0,7).map(c=>c.name).join(', ')+(alive.length>7?' …':''))
         :'Bloc dissolved — every member is conquered.')+
       '</div><button class="buy"><span class="bl"></span><span class="c"></span></button>';
     d.querySelector('.buy').onclick=()=>signPact(b);
@@ -4332,10 +4556,10 @@ async function fetchGlobalBoards(force){
 }
 function playerBoardHTML(limit){const rows=GLOBAL_BOARDS.players.slice(0,limit||100);
   if(!rows.length)return'<p class="note">No online player power has been recorded yet.</p>';
-  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+htmlEscape(r.username)+'</div><div class="v">'+fmt(Number(r.best_power)||0)+' power <span class="small">('+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country||'—'))+')</span></div></div>';}).join('');}
+  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+htmlEscape(r.username)+'</div><div class="v">'+fmt(Number(r.best_power)||0)+' power <span class="small">('+(c?countryFlagMarkup(c,true)+htmlEscape(c.name):htmlEscape(r.country||'—'))+')</span></div></div>';}).join('');}
 function nationBoardHTML(limit){const rows=GLOBAL_BOARDS.nations.slice(0,limit||GLOBAL_BOARDS.nations.length);
   if(!rows.length)return'<p class="note">No country power has been recorded yet.</p>';
-  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+(c?c.flag+' '+htmlEscape(c.name):htmlEscape(r.country))+' · '+fmt(r.contributors)+' player'+(Number(r.contributors)===1?'':'s')+'</div><div class="v">'+fmt(Number(r.total_power)||0)+' power</div></div>';}).join('');}
+  return rows.map((r,i)=>{const c=BY[r.country];return'<div class="stat"><div class="k">#'+(i+1)+' '+(c?countryFlagMarkup(c,true)+htmlEscape(c.name):htmlEscape(r.country))+' · '+fmt(r.contributors)+' player'+(Number(r.contributors)===1?'':'s')+'</div><div class="v">'+fmt(Number(r.total_power)||0)+' power</div></div>';}).join('');}
 async function renderBoards(){
   $('lbPlayers').innerHTML='<p class="note">Loading global commanders…</p>';$('lbNations').innerHTML='';
   try{await fetchGlobalBoards(false);$('lbPlayers').innerHTML=playerBoardHTML(100);$('lbNations').innerHTML=nationBoardHTML(GLOBAL_BOARDS.nations.length);}
@@ -4386,7 +4610,7 @@ function updateTop(){const rt=rates(),AP=armyPower();
   if(!has)$('autoState').textContent='locked';
   else{at.checked=S.auto;$('autoState').textContent=S.auto?'ON':'off';
     setHTMLIfChanged($('autoInfo'),S.auto
-      ?('Besieging <b>'+(S.target&&!S.conq[S.target]?BY[S.target].flag+' '+BY[S.target].name:'the weakest foe')+'</b>; the next target is chosen automatically.')
+      ?('Besieging <b>'+(S.target&&!S.conq[S.target]?BY[S.target].name:'the weakest foe')+'</b>; the next target is chosen automatically.')
       :'Sieges continue on their own; this picks the next target when one falls. Click the map or a nation&#39;s name to aim.');}
   const rc=recruitCostG();
   $('recruitCost').textContent=fmt(rc.g)+' 🪙 + '+fmt(rc.m)+' 🪖';
@@ -4466,7 +4690,7 @@ function buildCodex(){$('codex').innerHTML=
  '<p style="margin-top:8px"><b class="red">Prestige ⭐</b> (10+ territories) resets the run for Prestige Points: territories^1.4 × completed doctrines × 2 per plane cleared. Powerful homelands are not a bonus — they are a <b>reward</b>: each prestige unlocks two more starting tiers (T1 at first, up to T9 after four prestiges). Spend PP in the Throne Sanctum. Doctrine note: border raids never void the Bloodless Mandate — only your own assaults do.</p>'+
  '<p style="margin-top:8px"><b class="gold">Entrenchment.</b> No force — however vast — strips more than 8%/s of a territory&#39;s full defense by siege, 18% per storm (2 s recharge), or 60% per Firestorm. Overwhelming power shortens sieges to a floor — until true supremacy: at <b class="red">250× a territory&#39;s full defense</b> (down to 100× under total air cover) your forces skip the siege and <b class="red">annihilate</b> it outright, the late-game reward for outgrowing a plane. <b style="color:#e0a15f">Renown 🏅</b> from conquest is the only coin great heroes accept: Heroic Summons guarantee EPIC+, Mythic Rituals guarantee LEGENDARY+. After the cosmos falls, <b class="cyan">Infinite Mode</b> begins — ever-stronger rifts to repel for raw PP — and four <b class="grn">True Endings</b> await discovery. Speed controls (Space pauses) and three save slots live by the tension meter and Codex.</p>'+
  '<p style="margin-top:8px"><b class="red">Occupation resistance.</b> Every territory you hold hardens all remaining defenses by 2.2%, compounding — the world fights back as your empire swells. Each next target is only a step harder than the last, but deep runs become a true campaign; the Throne Sanctum&#39;s permanent multipliers are how future dynasties push further, faster.</p>'+
- '<p style="margin-top:8px"><b class="gold">Armed forces.</b> Infantry is your untrained pool; gold and equipment convert it into branches that fight at ×1.5–×3 weight and carry doctrines — 🎯 Snipers (−40% casualties at 40% share), 🛡️ Armor (raw power), ⚓ Navy (bloc blockades), ✈️ Air Force (doubled siege caps, halved annihilation threshold), 🥷 Special Forces (commanders half as likely to die). Specialists age, bleed and shrink with the army like everyone else.</p>'+
+ '<p style="margin-top:8px"><b class="gold">Armed forces.</b> Infantry can be trained into specialist branches with distinct strengths. The Solar Dominion adds Storm Troopers, Battle Droids, Jedi Knights, Starfighters, Star Destroyers, Sith Marauders, Clone Troopers, Mandalorian Commandos, Imperial Walkers, Rebel Frigates, Battlecruisers and Galactic Dreadnoughts. High-risk formations offer exceptional power but impose heavier casualties or economic upkeep.</p>'+
  '<p style="margin-top:8px"><b class="gold">Aging.</b> Soldiers serve ~10 minutes before retiring or dying of old age, so a standing army settles at roughly <span class="num">income × lifespan</span> — stockpiles melt, economies endure. Every cultivation realm stretches troop lifespan (×1.5 → ×15 at Immortal Ascension), which is the Dao&#39;s true gift to the rank and file. Aging never voids the Bloodless Mandate. The grimoire now holds seven spells, including Summoning Circles (×2 power), Reality Anchors (freeze all repairs) and Teleportation Legions (triple the next conquest).</p>'+
  '<p style="margin-top:8px"><b class="stl">Saving.</b> Changed progress syncs to the server within 5 seconds, after gameplay actions, when the tab is hidden, and when you press Sync now. Offline gains remain capped at 8 h at half rate.</p>';}
 
@@ -4556,7 +4780,7 @@ $('zIn').addEventListener('click',()=>zoomAt(1/1.35,VB.x+VB.w/2,VB.y+VB.h/2));
 $('zOut').addEventListener('click',()=>zoomAt(1.35,VB.x+VB.w/2,VB.y+VB.h/2));
 $('zReset').addEventListener('click',resetVB);
 $('hardResetBtn').addEventListener('click',()=>{
-  showModal('☠ DELETE ACCOUNT PROGRESS','<p>Erase the active run, all Prestige, upgrades, honors and validated leaderboard scores for this account. The login itself remains available.</p>',
+  showModal('☠ DELETE ACCOUNT PROGRESS','<p>Erase the active run, all Prestige, upgrades, honors and record scores for this account. The login itself remains available.</p>',
     [{t:'Keep my empire'},{t:'Erase progress',cls:'danger',fn:async()=>{try{
       const requestId=crypto.randomUUID();
       const result=await gameApiWithRetry('reset',{revision:SERVER_REVISION,requestId});SERVER_REVISION=result.revision;META=result.state.META;S=null;GLOBAL_BOARDS.loadedAt=0;showStart();toast('Account reset','All game progress and scores were deleted.','bad');
@@ -4589,7 +4813,7 @@ function buildCountrySel(){const sel=$('countrySel');sel.innerHTML='';
       .sort((a,b)=>a.tier-b.tier||a.name.localeCompare(b.name))
       .forEach(c=>{const o=document.createElement('option');o.value=c.code;
         const locked=c.tier>cap;o.disabled=locked;
-        o.textContent=(locked?'🔒 ':'')+c.flag+' '+c.name+' — T'+c.tier+
+        o.textContent=(locked?'🔒 ':'')+c.name+' — T'+c.tier+
           (locked?' · unlocks at prestige '+tierUnlockAt(c.tier):'');
         og.appendChild(o);});
     sel.appendChild(og);}
@@ -4602,10 +4826,10 @@ $('playerName').addEventListener('change',()=>{void updateCommanderNameFrom($('p
 $('seedBtn').addEventListener('click',()=>{
   try{const d=JSON.parse(decodeURIComponent(escape(atob($('seedIn').value.trim()))));
     if(!d||!CBY[d.s])throw 0;
-    if(CBY[d.s].tier>startTierCap()){$('seedInfo').innerHTML='<span class="red">Their homeland ('+CBY[d.s].flag+' '+CBY[d.s].name+') is still locked for you — prestige more first.</span>';return;}
+    if(CBY[d.s].tier>startTierCap()){$('seedInfo').innerHTML='<span class="red">Their homeland ('+CBY[d.s].name+') is still locked for you — prestige more first.</span>';return;}
     $('countrySel').value=d.s;updateStartInfo();
     $('chNocas').checked=!!(d.ch&&d.ch.nocas);$('chSpeed').checked=!!(d.ch&&d.ch.speed);$('chTiny').checked=!!(d.ch&&d.ch.tiny);
-    $('seedInfo').innerHTML='⚔ Duel loaded: beat <b class="gold">'+fmt(d.pp)+' PP</b> from '+CBY[d.s].flag+' '+CBY[d.s].name+' ('+(d.pl||0)+' planes, '+timeFmt(d.t||0)+').';
+    $('seedInfo').innerHTML='⚔ Duel loaded: beat <b class="gold">'+fmt(d.pp)+' PP</b> from '+CBY[d.s].name+' ('+(d.pl||0)+' planes, '+timeFmt(d.t||0)+').';
   }catch(e){$('seedInfo').innerHTML='<span class="red">Not a valid campaign seed.</span>';}});
 $('startBtn').addEventListener('click',async()=>{
   const code=$('countrySel').value;
@@ -4622,14 +4846,14 @@ $('startBtn').addEventListener('click',async()=>{
     });
     SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||8;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
     enterGame();
-    const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.flag+' '+h.name+'. The server has opened a validated run.','grn');
+    const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.name+'. The server has opened a validated run.','grn');
   }catch(error){toast('Campaign could not start',error.message,'bad');}
   finally{$('startBtn').disabled=false;}
 });
 function enterGame(){$('startScreen').classList.add('hidden');$('authScreen').classList.add('hidden');if($('commanderNameIn'))$('commanderNameIn').value=META.commanderName||'Commander';
   $('game').classList.remove('hidden');
   const h=CBY[S.startCode];
-  $('runLbl').textContent=(META.commanderName||'Commander')+' · '+h.flag+' '+h.name+' · run #'+(META.prestiges+1)+
+  $('runLbl').textContent=(META.commanderName||'Commander')+' · '+h.name+' · run #'+(META.prestiges+1)+
     (S.ch.nocas?' · 🩸':'')+(S.ch.speed?' · ⚡':'')+(S.ch.tiny?' · 🪶':'');
   awakeShown=null;if(!S.plane)S.plane='earth';
   buildRegionTabs();renderPlaneRow();buildGrid();buildMap();initMapNav();resetVB();renderSpeed();renderBranches();renderLaw();renderBuyRow();renderBuildings();
@@ -4730,13 +4954,14 @@ async function boot(){
     S.st=Object.assign({won:0,cas:0,gensLost:0,atk:0,dmg:0,goldE:0,mpRec:0},S.st||{});
     S.rebels=S.rebels||{};S.pacts=S.pacts||{};S.rc=S.rc||{};
     S.chFail=S.chFail||{};S.hp=S.hp||{};S.ch=S.ch||{};
-    S.plane=S.plane||'earth';S.pc=S.pc||{};S.mana=S.mana||0;S.b.shrine=S.b.shrine||0;
+    S.plane=S.plane||'earth';S.pc=S.pc||{};S.mana=S.mana||0;
+    S.b=Object.assign({off:0,bar:0,civ:0,mil:0,clone:0,orb:0,reactor:0,aca:0,well:0,shrine:0},S.b||{});
     S.renown=S.renown||0;S.summons=S.summons||{h:0,m:0};S.riskW=S.riskW||{};
     S.poke=S.poke||{balls:3,bought:0,owned:{},team:[],seen:{},shards:0,evo:{},megaStones:0,mega:{},trials:{},legendProgress:{}};S.poke.owned=S.poke.owned||{};S.poke.team=S.poke.team||[];S.poke.seen=S.poke.seen||{};S.poke.shards=S.poke.shards||0;S.poke.evo=S.poke.evo||{};for(const id of Object.keys(S.poke.evo))if(S.poke.evo[id]===true)S.poke.evo[id]=1;S.poke.megaStones=S.poke.megaStones||0;S.poke.mega=S.poke.mega||{};S.poke.activeMega=S.poke.activeMega||null;S.poke.megaCooldownUntil=S.poke.megaCooldownUntil||0;S.poke.zCrystals=S.poke.zCrystals||0;S.poke.zActiveUntil=S.poke.zActiveUntil||0;S.poke.zCooldownUntil=S.poke.zCooldownUntil||0;S.poke.dmaxBand=!!S.poke.dmaxBand;S.poke.dmaxEnergy=S.poke.dmaxEnergy||0;S.poke.activeDmax=S.poke.activeDmax||null;S.poke.dmaxCooldownUntil=S.poke.dmaxCooldownUntil||0;S.poke.raidCooldown=S.poke.raidCooldown||0;S.poke.raidWins=S.poke.raidWins||0;S.poke.teraOrb=!!S.poke.teraOrb;S.poke.teraShards=S.poke.teraShards||0;S.poke.teraTypes=S.poke.teraTypes||{};S.poke.activeTera=S.poke.activeTera||null;S.poke.teraCooldownUntil=S.poke.teraCooldownUntil||0;S.poke.battlePoints=S.poke.battlePoints||0;S.poke.worldRank=S.poke.worldRank||0;S.poke.champStreak=S.poke.champStreak||0;S.poke.champWins=S.poke.champWins||{};S.poke.training=S.poke.training||{};S.poke.eggs=S.poke.eggs||[];S.poke.eggsHatched=S.poke.eggsHatched||0;S.poke.traits=S.poke.traits||{};S.poke.shiny=S.poke.shiny||{};S.poke.rivalWins=S.poke.rivalWins||{};S.poke.rivalStreak=S.poke.rivalStreak||0;S.poke.specialForms=S.poke.specialForms||{};S.poke.zygardeCells=Math.min(100,S.poke.zygardeCells||(S.poke.owned.zygarde?50:0));if(S.poke.activeTera&&S.poke.activeTera.until<=Date.now())S.poke.activeTera=null;if(S.poke.activeMega&&S.poke.activeDmax){if(S.poke.activeMega.until>=S.poke.activeDmax.until)S.poke.activeDmax=null;else S.poke.activeMega=null;}if(S.poke.activeTera){const states=[['mega',S.poke.activeMega],['dmax',S.poke.activeDmax],['tera',S.poke.activeTera]].filter(x=>x[1]);if(states.length>1){states.sort((a,b)=>b[1].until-a[1].until);S.poke.activeMega=states[0][0]==='mega'?states[0][1]:null;S.poke.activeDmax=states[0][0]==='dmax'?states[0][1]:null;S.poke.activeTera=states[0][0]==='tera'?states[0][1]:null;}}let megaRefund=0;for(const id of Object.keys(S.poke.mega))if(!MEGA_ELIGIBLE.has(id)){delete S.poke.mega[id];megaRefund++;}if(megaRefund)S.poke.megaStones+=megaRefund;if(S.poke.activeMega&&(!MEGA_ELIGIBLE.has(S.poke.activeMega.id)||!S.poke.mega[S.poke.activeMega.id]||S.poke.activeMega.until<=Date.now()))S.poke.activeMega=null;S.poke.trials=S.poke.trials||{};S.poke.legendProgress=S.poke.legendProgress||{};for(const l of LEGEND_CHALLENGES)if(S.poke.owned[l.id])S.poke.legendProgress[l.id]=3;S.badges=S.badges||{};
     if(S.speed===undefined)S.speed=1;S.stormCd=S.stormCd||0;
     S.infT=S.infT||90;S.infLvl=S.infLvl||0;
     S.summonUntil=S.summonUntil||0;S.anchorUntil=S.anchorUntil||0;
-    S.tr=Object.assign({snip:0,armor:0,navy:0,air:0,sf:0},S.tr||{});
+    S.tr=Object.assign({snip:0,armor:0,navy:0,air:0,sf:0,storm:0,droid:0,jedi:0,fighter:0,destroyer:0,sith:0,cloneTrooper:0,mando:0,walker:0,frigate:0,battlecruiser:0,dreadnought:0},S.tr||{});
     S.warpath=!!S.warpath;
     S.spells=Object.assign({fire:0,shield:0,mind:0,summon:0,anchor:0,transmute:0,warpath:0},S.spells||{});
     S.spells=S.spells||{fire:0,shield:0,mind:0};S.shieldUntil=S.shieldUntil||0;
@@ -4748,8 +4973,8 @@ async function boot(){
     if(loaded.world)presentWorldResult({result:loaded.world});
     const g=loaded.economyGain;
     if(g&&Number(g.dt)>=60){
-      showModal('🕰️ SERVER-VERIFIED OFFLINE GAINS',
-      '<p>'+timeFmt(Number(g.dt)||0)+' passed. Supabase settled your protected economy:</p>'+
+      showModal('🕰️ OFFLINE GAINS',
+      '<p>'+timeFmt(Number(g.dt)||0)+' passed. Your empire prospered while you were away:</p>'+
       '<div class="statgrid" style="margin-top:10px">'+
       vst('Manpower','+'+fmt(g.mp))+vst('Gold','+'+fmt(g.gold))+
       vst('Equipment','+'+fmt(g.eq))+(g.qi>0?vst('Qi','+'+fmt(g.qi)):'')+
