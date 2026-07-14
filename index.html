@@ -887,7 +887,10 @@ function setAuthTab(tab){
   if(target)setTimeout(()=>target.focus(),0);
 }
 function showAuth(){
+  RUNTIME_EPOCH++;
   ACCOUNT=null;S=null;META=defaultMeta();SERVER_REVISION=0;ACCESS_TOKEN='';
+  PRESTIGE_PREVIEW=null;PRESTIGE_PREVIEW_AT=0;PRESTIGE_PREVIEW_BUSY=null;
+  META_ACTION_CHAIN=Promise.resolve();
   saveDirty=false;saveBusy=false;saveConflict=false;actionBusy=false;
   for(const command of serverActionQueue.splice(0))command.resolve(null);
   if(serverActionActiveBatch){
@@ -975,7 +978,7 @@ async function loginAccount(){
   await boot();
 }
 async function logoutAccount(){
-  if(ACCOUNT){
+  if(ACCOUNT&&S){
     saveDirty=true;
     const saved=await flushServerSave(false,true);
     if(!saved){
@@ -3296,6 +3299,7 @@ async function flushServerActionQueue(){
 
 function runServerAction(type,payload={},quiet=false){
   if(!ACCOUNT||!S||saveConflict)return Promise.resolve(null);
+  invalidatePrestigePreview();
   lastGameplayInputAt=Date.now();
   if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
 
@@ -4415,49 +4419,264 @@ async function advanceRealm(){const nxt=REALMS[S.realm+1];if(!nxt||S.realm<1)ret
 
 /* ================= prestige ================= */
 function startTierCap(){return Math.min(9,1+2*META.prestiges);}
-function ppCalc(){const n=conqCount();let ch=1;const ok={};
-  ok.nocas=S.ch.nocas&&!S.chFail.nocas;ok.speed=S.ch.speed&&S.playSec<=1500;ok.tiny=S.ch.tiny;
-  if(ok.nocas)ch*=2.5;if(ok.speed)ch*=2;if(ok.tiny)ch*=2;
-  const planes=Object.keys(S.pc||{}).length;
-  let pp=Math.pow(n,1.25)*ch*Math.pow(2.2,planes)/4;
-  return{pp:n>=10?Math.floor(pp):0,n,ch,ok,planes,full:S.won};}
+let PRESTIGE_PREVIEW=null;
+let PRESTIGE_PREVIEW_AT=0;
+let PRESTIGE_PREVIEW_BUSY=null;
+let RUNTIME_EPOCH=0;
+let META_ACTION_CHAIN=Promise.resolve();
+
+function ppCalcLocal(){
+  const n=conqCount();
+  let ch=1;
+  const ok={};
+  const casualties=Math.max(0,Number(S&&S.st&&S.st.cas)||0);
+  ok.nocas=!!(S&&S.ch&&S.ch.nocas)&&
+    !(S&&S.chFail&&S.chFail.nocas)&&casualties===0;
+  ok.speed=!!(S&&S.ch&&S.ch.speed)&&Number(S.playSec||0)<=1500;
+  ok.tiny=!!(S&&S.ch&&S.ch.tiny);
+  if(ok.nocas)ch*=2.5;
+  if(ok.speed)ch*=2;
+  if(ok.tiny)ch*=2;
+  const planes=Object.keys(S&&S.pc||{}).length;
+  const pp=n>=10
+    ?Math.floor(Math.pow(n,1.25)*ch*Math.pow(2.2,planes)/4)
+    :0;
+  return{pp,n,ch,ok,planes,full:!!(S&&S.won),exact:false};
+}
+function invalidatePrestigePreview(){
+  PRESTIGE_PREVIEW=null;
+  PRESTIGE_PREVIEW_AT=0;
+}
+function ppCalc(){
+  const local=ppCalcLocal();
+  if(PRESTIGE_PREVIEW&&Date.now()-PRESTIGE_PREVIEW_AT<15000){
+    return Object.assign({},local,PRESTIGE_PREVIEW,{exact:true});
+  }
+  return local;
+}
+async function fetchPrestigePreview(force=false){
+  if(!ACCOUNT||!S)return null;
+  if(!force&&PRESTIGE_PREVIEW&&Date.now()-PRESTIGE_PREVIEW_AT<15000){
+    return PRESTIGE_PREVIEW;
+  }
+  if(PRESTIGE_PREVIEW_BUSY)return PRESTIGE_PREVIEW_BUSY;
+  const previewEpoch=RUNTIME_EPOCH;
+  PRESTIGE_PREVIEW_BUSY=(async()=>{
+    try{
+      const result=await gameApiWithRetry('prestige-preview',{
+        revision:SERVER_REVISION
+      },{timeoutMs:7000});
+      if(result&&result.preview&&previewEpoch===RUNTIME_EPOCH&&S){
+        PRESTIGE_PREVIEW=Object.assign({},result.preview);
+        PRESTIGE_PREVIEW_AT=Date.now();
+        if(ACTIVE_TAB==='prestige')updatePrestige();
+      }
+      return PRESTIGE_PREVIEW;
+    }catch(_error){
+      return null;
+    }finally{
+      PRESTIGE_PREVIEW_BUSY=null;
+    }
+  })();
+  return PRESTIGE_PREVIEW_BUSY;
+}
 function makeSeed(){const r=ppCalc();
   return btoa(unescape(encodeURIComponent(JSON.stringify(
     {v:1,s:S.startCode,ch:S.ch,pp:r.pp,pl:Object.keys(S.pc).length,t:Math.floor(S.playSec)}))));}
 function seedBox(){return '<p class="small" style="margin-top:10px">Campaign seed — share it and dare a rival to beat this claim:</p>'+
   '<textarea readonly style="width:100%;height:52px;margin-top:5px;background:var(--sunken);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px;font-family:var(--mono);font-size:10px">'+makeSeed()+'</textarea>';}
-function doPrestige(){const r=ppCalc();if(r.pp<1)return;
+
+async function waitForTransitionReady(){
+  if(!ACCOUNT)return;
+
+  if(saveTimer){
+    clearTimeout(saveTimer);
+    saveTimer=null;
+  }
+
+  // A save already in flight can advance the revision after a transition
+  // request is created. Wait for that one request only; do not start another
+  // redundant save.
+  const saveStarted=Date.now();
+  while(saveBusy&&Date.now()-saveStarted<12000){
+    await new Promise(resolve=>setTimeout(resolve,25));
+  }
+  if(saveBusy)throw new Error('A save is still being processed.');
+
+  if(serverActionQueue.length)await flushServerActionQueue();
+  const started=Date.now();
+  while((serverActionSending||serverActionActiveBatch||serverActionQueue.length)&&Date.now()-started<12000){
+    if(!serverActionSending&&serverActionQueue.length)await flushServerActionQueue();
+    await new Promise(resolve=>setTimeout(resolve,25));
+  }
+  if(serverActionSending||serverActionActiveBatch||serverActionQueue.length){
+    throw new Error('Pending orders are still being processed.');
+  }
+}
+function resetRuntimeAfterPrestige(){
+  RUNTIME_EPOCH++;
+  if(serverActionTimer){clearTimeout(serverActionTimer);serverActionTimer=null;}
+  if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
+
+  for(const command of serverActionQueue.splice(0))command.resolve(null);
+  if(serverActionActiveBatch&&Array.isArray(serverActionActiveBatch.commands)){
+    for(const command of serverActionActiveBatch.commands)command.resolve(null);
+  }
+
+  serverActionActiveBatch=null;
+  serverActionSending=false;
+  serverActionDelayToastShown=false;
+  actionBusy=false;
+  saveBusy=false;
+  saveDirty=false;
+  saveConflict=false;
+  stateVersion=0;
+  lastSavedVersion=0;
+
+  COMBAT_VISUAL_HP={};
+  LOCAL_COMBATS={};
+  LOCAL_CONQUESTS={};
+  targetIntentSeq=0;
+  targetIntentCode='';
+  targetIntentPending=false;
+  targetIntentKnown=false;
+  passiveCombatSampleKey='';
+  optimisticStandardRecruitCount=0;
+  worldPulseBusy=false;
+  lastWorldEventId='';
+  PRESTIGE_PREVIEW_BUSY=null;
+  invalidatePrestigePreview();
+
+  clearOptimisticCanonical();
+  SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
+  AUTHORITY_PHASE=0;
+  updateServerActionBusy();
+}
+async function doPrestige(){
+  let r=ppCalc();
+  if(r.pp<1)return;
+
+  const button=$('prestigeBtn');
+  if(button){
+    button.disabled=true;
+    button.textContent='Checking claim…';
+  }
+  const exact=await fetchPrestigePreview(true);
+  r=exact?Object.assign({},r,exact,{exact:true}):r;
+
+  if(button){
+    button.disabled=r.pp<1;
+    button.textContent=r.pp<1
+      ?('Hold 10 territories to claim ('+r.n+'/10)')
+      :'Claim '+fmt(r.pp)+' PP';
+  }
+  if(r.pp<1)return;
+
   showModal('⭐ CLAIM THE MANDATE',
     '<p>Dissolve this world and crown a new age. You will bank <span class="big">'+fmt(r.pp)+
-    ' PP</span> and keep every Throne Sanctum purchase.</p><p class="small" style="margin-top:8px">Buildings, tech, generals, realm and territories reset. Prestige Points do not.</p>'+seedBox(),
-    [{t:'Not yet'},{t:'Prestige',cls:'danger',fn:performPrestige}]);}
+    ' PP</span> and keep every Throne Sanctum purchase.</p>'+
+    '<p class="small" style="margin-top:8px">This amount has been calculated from the validated campaign.</p>'+
+    '<p class="small" style="margin-top:8px">Buildings, tech, generals, realm and territories reset. Prestige Points do not.</p>'+
+    seedBox(),
+    [{t:'Not yet'},{t:'Prestige',cls:'danger',fn:performPrestige}]);
+}
 async function claimPrestige(mode){
+  const button=$('prestigeBtn');
   try{
-    saveDirty=true;
-    if(!await flushServerSave(false,true))throw new Error('The latest save could not be synchronized.');
+    if(button){
+      button.disabled=true;
+      button.textContent='Claiming…';
+    }
+
+    // Gameplay actions already commit their own state. Wait for those orders,
+    // but do not perform the old redundant full-save request.
+    await waitForTransitionReady();
+
     const requestId=crypto.randomUUID();
     const result=await gameApiWithRetry('claim-prestige',{
       revision:SERVER_REVISION,
       requestId,
       mode:mode||'standard'
-    });
-    SERVER_REVISION=result.revision;META=result.state.META;S=result.state.S;GLOBAL_BOARDS.loadedAt=0;
+    },{timeoutMs:12000});
+
+    SERVER_REVISION=Number(result.revision);
+    META=copyJson(result.state&&result.state.META||META);
+    S=null;
+    GLOBAL_BOARDS.loadedAt=0;
+    PRESTIGE_PREVIEW=null;
+    PRESTIGE_PREVIEW_AT=0;
+
+    resetRuntimeAfterPrestige();
+    META_ACTION_CHAIN=Promise.resolve();
     showStart();
-    toast(mode==='gauntlet'?'🧬 ORDER GAUNTLET ARMED':'⭐ +'+fmt(result.awardedPrestige)+' Prestige',
-      mode==='gauntlet'?'Begin a new campaign. Tiny Army and Bloodless rules are mandatory; automation and battle transformations are forbidden.':'The validated claim is stored on the server; rankings remain paused until Step 5.','grn');
-  }catch(error){toast('Prestige rejected',error.message,'bad');}
+    renderShop();
+    updateShop();
+
+    toast(
+      mode==='gauntlet'
+        ?'🧬 ORDER GAUNTLET ARMED'
+        :'⭐ +'+fmt(Number(result.awardedPrestige)||0)+' Prestige',
+      mode==='gauntlet'
+        ?'Begin a new campaign. Tiny Army and Bloodless rules are mandatory; automation and battle transformations are forbidden.'
+        :'Your new Prestige Points are ready to spend.',
+      'grn'
+    );
+  }catch(error){
+    toast('Prestige rejected',error&&error.message?error.message:'The claim could not be completed.','bad');
+    if(button){
+      button.disabled=false;
+      updatePrestige();
+    }
+  }
 }
 async function performPrestige(){await claimPrestige('standard');}
+
+function enqueueMetaAction(task){
+  const next=META_ACTION_CHAIN.then(task,task);
+  META_ACTION_CHAIN=next.catch(()=>{});
+  return next;
+}
+async function buyShopWithoutCampaign(item){
+  return enqueueMetaAction(async()=>{
+    const requestId=crypto.randomUUID();
+    const result=await gameApiWithRetry('buy-shop',{
+      revision:SERVER_REVISION,
+      requestId,
+      id:item.id
+    },{timeoutMs:8000});
+
+    SERVER_REVISION=Number(result.revision);
+    META=copyJson(result.state&&result.state.META||META);
+    clearOptimisticCanonical();
+    renderShop();
+    updateShop();
+    updateStartInfo();
+    showStart();
+    return result;
+  });
+}
 async function buyShop(id){
   const item=SHOP.find(rule=>rule.id===String(id||''));
   if(!item)return;
   const level=Math.max(0,Math.floor(shopLvl(item.id)));
-  if(level>=item.max){toast('Upgrade maxed',item.n+' is already at maximum level.','');return;}
+  if(level>=item.max){
+    toast('Upgrade maxed',item.n+' is already at maximum level.','');
+    return;
+  }
 
-  // Let runServerAction predict when possible and fall back to authoritative
-  // validation when the displayed PP value is stale.
-  const result=await runServerAction('buy-shop',{id:item.id},true);
-  if(result)sfx('buy');
+  try{
+    let result;
+    if(!S){
+      result=await buyShopWithoutCampaign(item);
+    }else{
+      result=await runServerAction('buy-shop',{id:item.id},true);
+    }
+    if(result)sfx('buy');
+  }catch(error){
+    toast('Purchase failed',error&&error.message?error.message:'The upgrade could not be purchased.','bad');
+    renderShop();
+    updateShop();
+  }
 }
 
 /* ================= events & raids ================= */
@@ -5057,7 +5276,11 @@ async function renderBoards(){
 }
 function setHTMLIfChanged(element,value){if(element&&element.innerHTML!==value)element.innerHTML=value;}
 let lastHintRender=-1,prestigeChallengeKey='',PRESTIGE_CHALLENGE_REFS={};
-function updatePrestige(){const r=ppCalc();
+function updatePrestige(){if(!S)return;
+  if(!PRESTIGE_PREVIEW_BUSY&&Date.now()-PRESTIGE_PREVIEW_AT>=15000){
+    void fetchPrestigePreview(false);
+  }
+  const r=ppCalc();
   $('ppPot').textContent=fmt(r.pp);
   $('ppMath').textContent=r.n+' territories^1.25 × doctrines ×'+r.ch+' × plane multiplier ×'+Math.pow(2.2,r.planes).toFixed(2)+' ÷ 4';
   const challengeDefs=[['nocas','🩸 Bloodless'],['speed','⚡ Lightning'],['tiny','🪶 Austere']].filter(p=>S.ch[p[0]]);
@@ -5272,9 +5495,24 @@ $('zReset').addEventListener('click',resetVB);
 $('hardResetBtn').addEventListener('click',()=>{
   showModal('☠ DELETE ACCOUNT PROGRESS','<p>Erase the active run, all Prestige, upgrades, honors and record scores for this account. The login itself remains available.</p>',
     [{t:'Keep my empire'},{t:'Erase progress',cls:'danger',fn:async()=>{try{
+      await waitForTransitionReady();
       const requestId=crypto.randomUUID();
-      const result=await gameApiWithRetry('reset',{revision:SERVER_REVISION,requestId});SERVER_REVISION=result.revision;META=result.state.META;S=null;GLOBAL_BOARDS.loadedAt=0;showStart();toast('Account reset','All game progress and scores were deleted.','bad');
-    }catch(error){toast('Reset failed',error.message,'bad');}}}]);});
+      const result=await gameApiWithRetry('reset',{
+        revision:SERVER_REVISION,
+        requestId
+      });
+      resetRuntimeAfterPrestige();
+      SERVER_REVISION=Number(result.revision);
+      META=copyJson(result.state&&result.state.META||defaultMeta());
+      S=null;
+      GLOBAL_BOARDS.loadedAt=0;
+      showStart();
+      renderShop();
+      updateShop();
+      toast('Account reset','All game progress and scores were deleted.','bad');
+    }catch(error){
+      toast('Reset failed',error&&error.message?error.message:'The reset could not be completed.','bad');
+    }}}]);});
 async function renderStartLB(){
   $('lbStart').innerHTML='<p class="note">Loading global leaderboards…</p>';
   try{
@@ -5327,6 +5565,7 @@ $('startBtn').addEventListener('click',async()=>{
   const doctrines={nocas:$('chNocas').checked,speed:$('chSpeed').checked,tiny:$('chTiny').checked};
   $('startBtn').disabled=true;
   try{
+    await META_ACTION_CHAIN;
     const requestId=crypto.randomUUID();
     const result=await gameApiWithRetry('start-run',{
       revision:SERVER_REVISION,
@@ -5334,7 +5573,9 @@ $('startBtn').addEventListener('click',async()=>{
       country:code,
       doctrines
     });
-    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||8;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
+    resetRuntimeAfterPrestige();
+    SERVER_REVISION=result.revision;S=result.state.S;META=result.state.META;AUTHORITY_PHASE=Number(result.authorityPhase)||8;
+    PRESTIGE_PREVIEW=null;PRESTIGE_PREVIEW_AT=0;SERVER_RATES=Object.assign({mps:0,gps:0,eps:0,qps:0,mana:0},result.rates||{});
     enterGame();
     const h=CBY[code];toast('🏴 Campaign begins','You hold '+h.name+'. The server has opened a validated run.','grn');
   }catch(error){toast('Campaign could not start',error.message,'bad');}
