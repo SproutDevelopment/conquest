@@ -892,6 +892,7 @@ function showAuth(){
   serverActionActiveBatch=null;serverActionSending=false;
   clearTimeout(serverActionTimer);serverActionTimer=null;
   clearOptimisticCanonical();
+  PROVISIONAL_CONQUESTS={};
   targetIntentSeq=0;targetIntentCode='';targetIntentPending=false;clearCombatVisual();
   AUTHORITY_PHASE=0;SERVER_RATES={mps:0,gps:0,eps:0,qps:0,mana:0};
   stateVersion=0;lastSavedVersion=0;
@@ -2504,7 +2505,8 @@ function applyOptimisticAction(type,payload){
   if(type==='attack'){
     const code=String(payload.code||S.target||'');
     const country=BY[code];
-    if(!country||S.conq[code]||canSiege(country))return false;
+    if(!country||(S.conq[code]&&!isProvisionalConquest(code))||
+       canSiege(country))return false;
     S.target=code;
     return true;
   }
@@ -2662,6 +2664,7 @@ function rebuildOptimisticState(){
     command.optimisticApplied=applyOptimisticAction(command.type,command.payload);
   }
 
+  restoreProvisionalConquests();
   updateOptimisticQueueBadge();
 }
 
@@ -2953,7 +2956,11 @@ async function flushServerActionQueue(){
     }else if(status>=400&&status<500&&status!==429){
       serverActionActiveBatch=null;
       for(const command of batch.commands){
-        if(command.type==='attack')clearCombatVisual(String(command.payload&&command.payload.code||''));
+        if(command.type==='attack'){
+          const code=String(command.payload&&command.payload.code||'');
+          clearCombatVisual(code);
+          clearProvisionalConquest(code,false);
+        }
       }
       rollbackAndReplayOptimisticState();
       resolveFailedActionBatch(
@@ -3233,7 +3240,61 @@ function aliveAllies(c){if(!c.bloc)return 0;let n=0;
 function pactActive(b){return S.pacts[b]>Date.now();}
 function resFactor(){return Math.pow(1.022,Math.max(0,conqCount()-1));}
 let COMBAT_VISUAL_HP={};
+let PROVISIONAL_CONQUESTS={};
 let targetIntentSeq=0,targetIntentCode='',targetIntentPending=false;
+
+function isProvisionalConquest(code){
+  return !!PROVISIONAL_CONQUESTS[String(code||'')];
+}
+function canonicalHasConquest(code){
+  return !!(
+    optimisticCanonicalS&&optimisticCanonicalS.conq&&
+    optimisticCanonicalS.conq[code]
+  );
+}
+function restoreProvisionalConquests(){
+  if(!S)return;
+  S.conq=optimisticObject(S.conq);
+  S.hp=optimisticObject(S.hp);
+  for(const code of Object.keys(PROVISIONAL_CONQUESTS)){
+    if(canonicalHasConquest(code)){
+      delete PROVISIONAL_CONQUESTS[code];
+      continue;
+    }
+    S.conq[code]='pending';
+    S.hp[code]=0;
+    COMBAT_VISUAL_HP[code]=0;
+  }
+}
+function clearProvisionalConquest(code,confirmed=false){
+  code=String(code||'');
+  if(!code)return;
+  delete PROVISIONAL_CONQUESTS[code];
+  if(!confirmed&&!canonicalHasConquest(code)&&S){
+    if(S.conq)delete S.conq[code];
+    if(S.hp&&optimisticCanonicalS&&optimisticCanonicalS.hp&&
+       Object.prototype.hasOwnProperty.call(optimisticCanonicalS.hp,code)){
+      S.hp[code]=copyJson(optimisticCanonicalS.hp[code]);
+    }
+  }
+}
+function markProvisionalConquest(country){
+  if(!S||!country||canonicalHasConquest(country.code)||
+     isProvisionalConquest(country.code))return;
+  const code=country.code;
+  PROVISIONAL_CONQUESTS[code]={at:Date.now(),intent:targetIntentSeq};
+  S.conq=optimisticObject(S.conq);
+  S.hp=optimisticObject(S.hp);
+  S.conq[code]='pending';
+  S.hp[code]=0;
+  COMBAT_VISUAL_HP[code]=0;
+
+  toast('🏳️ '+country.name+' has fallen',
+    'The claim is immediate while Supabase finalizes rewards.','grn');
+  sfx('conq');confettiAtCard(code);
+  rebuildCard(code);updateMapTerritory(code);updateRegionTabs();updateTop();
+  queueSiegeHeartbeat(code,true);
+}
 function noteTargetIntent(code){
   targetIntentSeq+=1;
   targetIntentCode=String(code||'');
@@ -3250,22 +3311,26 @@ function batchTargetIntentSeq(batch){
 }
 function restoreLatestTargetIntent(batch){
   if(!S||!targetIntentPending)return;
-  const acknowledged=batchTargetIntentSeq(batch);
   const intended=targetIntentCode;
 
-  if(intended&&S.conq&&S.conq[intended]){
-    targetIntentPending=false;
-    targetIntentCode='';
+  // The latest explicit player choice stays sticky across every older combat
+  // response, including responses arriving after its own target acknowledgement.
+  if(intended){
+    const confirmed=!!(
+      optimisticCanonicalS&&optimisticCanonicalS.conq&&
+      optimisticCanonicalS.conq[intended]
+    );
+    if(confirmed){
+      targetIntentPending=false;
+      targetIntentCode='';
+      if(String(S.target||'')===intended)S.target=null;
+      return;
+    }
+    S.target=intended;
     return;
   }
 
-  if(acknowledged>=targetIntentSeq&&String(S.target||'')===intended){
-    targetIntentPending=false;
-    return;
-  }
-
-  // An older response must never overwrite a newer click on another country.
-  S.target=intended||null;
+  S.target=null;
 }
 function canonicalDefenseRemaining(c){
   return (S.hp[c.code]!==undefined)?Number(S.hp[c.code]):defOf(c);
@@ -3393,7 +3458,10 @@ function entrench(c,info){return defOf(c)*info.aF*info.fx*(info.rs||1)*(1-defRed
 let serverCombatAcc=0,autoTargetAt=0,localCombatPaintAcc=0;
 
 function predictLiveSiege(rawDt){
-  if(!S||!S.target||S.conq[S.target]||S.mp<1)return;
+  if(!S||!S.target||
+     (S.conq[S.target]&&!isProvisionalConquest(S.target))||
+     S.mp<1)return;
+  if(isProvisionalConquest(S.target))return;
   const country=BY[S.target];
   if(!country||canSiege(country))return;
 
@@ -3410,21 +3478,15 @@ function predictLiveSiege(rawDt){
   if(damage<=0||info.rem<=0)return;
 
   const multiplier=info.eff/Math.max(1e-12,info.rem);
-  COMBAT_VISUAL_HP[country.code]=Math.max(
-    0.000001,
+  const nextDefense=Math.max(
+    0,
     info.rem-damage/Math.max(1e-12,multiplier)
   );
+  COMBAT_VISUAL_HP[country.code]=nextDefense;
+  if(nextDefense<=0.000001)markProvisionalConquest(country);
 
-  // Match the pre-authority game's continuous casualty presentation. The
-  // server still supplies the final loss and corrects any prediction.
-  const casualtyFraction=expCas(country)*dt;
-  const predictedLoss=Math.min(Math.max(0,Number(S.mp)||0),Math.max(0,Number(S.mp)||0)*casualtyFraction);
-  if(predictedLoss>0){
-    S.mp=Math.max(0,S.mp-predictedLoss);
-    S.st=optimisticObject(S.st);
-    S.st.cas=Math.max(0,Number(S.st.cas)||0)+predictedLoss;
-    clampTrained();
-  }
+  // Casualties are applied once from the canonical response. Speculating
+  // them here made older attack responses visually cancel newer Mobilize clicks.
 
   localCombatPaintAcc+=Math.max(0,rawDt);
   if(localCombatPaintAcc>=0.05){
@@ -3434,8 +3496,10 @@ function predictLiveSiege(rawDt){
   }
 }
 
-function queueSiegeHeartbeat(code){
-  if(!code||!S||S.target!==code||S.conq[code]||
+function queueSiegeHeartbeat(code,force=false){
+  const provisional=isProvisionalConquest(code);
+  if(!code||!S||(!force&&S.target!==code)||
+     (S.conq[code]&&!provisional)||
      hasPendingServerAction('attack','siege',code))return;
 
   void runServerAction('attack',{mode:'siege',code},true).then(result=>{
@@ -3460,7 +3524,7 @@ function removeQueuedSiegeOrders(keepCode=''){
 
 function selectAttackTargetInstantly(code){
   const country=BY[code];
-  if(!country||S.conq[code])return false;
+  if(!country||(S.conq[code]&&!isProvisionalConquest(code)))return false;
   const gate=canSiege(country);
   if(gate){toast('🔒 '+country.name,gate,'bad');return false;}
 
@@ -3524,6 +3588,11 @@ function showCombatResult(envelope,quiet){
   if(r.promoted)toast('🎖️ Promotion',r.promoted.name+' reached level '+r.promoted.lvl+'.','grn');
   if(r.generalLost){sfx('death');showModal('⚰️ A GENERAL HAS FALLEN','<p><b>'+htmlEscape(r.generalLost.title+' '+r.generalLost.name)+'</b> died leading the assault.</p><p class="small" style="margin-top:8px">The server recorded this permanent loss.</p>',[{t:'Honor the fallen'}]);}
   if(r.conquered&&c){
+    clearProvisionalConquest(c.code,true);
+    if(targetIntentCode===c.code){
+      targetIntentPending=false;
+      targetIntentCode='';
+    }
     toast('🏳️ '+c.name+' has fallen','Loot '+fmt(Number(r.loot)||0)+' gold · '+fmt(Number(r.recruits)||0)+' recruits rally to you','grn');
     sfx('conq');confettiAtCard(c.code);rebuildCard(c.code);renderPacts();updateRegionTabs();renderPlaneRow();
     if(r.regionCleared)toast('🌍 '+(r.regionName||r.regionCleared)+' UNIFIED','Regional command grants +10% army power and '+fmt(Number(r.regionBonus)||0)+' gold.','grn');
@@ -3534,6 +3603,7 @@ function showCombatResult(envelope,quiet){
     clearCombatVisual(r.code);
     refreshTargets();updateCards();updateMap();updateRegionTabs();updateTop();
   }else if(quiet&&r.code){
+    if(isProvisionalConquest(r.code))queueSiegeHeartbeat(r.code,true);
     restoreLatestTargetIntent(null);
     reconcileCombatVisual();
     updateCard(r.code);updateMapTerritory(r.code);
@@ -3553,13 +3623,16 @@ async function burst(code,quiet){
   if(result)showCombatResult(result,!!quiet);
 }
 function combatTick(dt){
-  if(AUTHORITY_PHASE<3||!S.target||S.conq[S.target]||S.mp<1)return;
+  if(AUTHORITY_PHASE<3||!S.target||
+     (S.conq[S.target]&&!isProvisionalConquest(S.target))||
+     S.mp<1)return;
   serverCombatAcc+=Math.max(0,dt);
-  if(serverCombatAcc<0.5)return;
+  const provisional=isProvisionalConquest(S.target);
+  if(serverCombatAcc<(provisional?0.2:0.5))return;
   const code=S.target;
   if(hasPendingServerAction('attack','siege',code))return;
   serverCombatAcc=0;
-  queueSiegeHeartbeat(code);
+  queueSiegeHeartbeat(code,provisional);
 }
 let combatFrameAt=performance.now();
 function combatVisualFrame(now){
