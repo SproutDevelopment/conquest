@@ -441,9 +441,76 @@ body.hc{--bg:#000;--panel:#0b0e08;--raised:#141811;--sunken:#050704;--line:#5565
 body.bigfont{font-size:17px}
 footer{padding:20px 14px 30px;text-align:center;color:var(--faint);font-size:11px;letter-spacing:.08em}
 kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-radius:3px;padding:1px 5px;background:var(--sunken)}
+
+/* ---------- HKDSE celebration banner ---------- */
+#hkdseBanner{
+  position:relative;
+  z-index:1000;
+  width:100%;
+  padding:15px 18px;
+  overflow:hidden;
+  text-align:center;
+  border-bottom:2px solid rgba(255,255,255,.75);
+  background:linear-gradient(90deg,#ff1f7a,#ffcc00,#15e8ff,#71ff56,#b65cff,#ff1f7a);
+  background-size:400% 400%;
+  box-shadow:0 0 18px rgba(255,255,255,.75),0 0 36px rgba(255,220,80,.45),inset 0 0 24px rgba(255,255,255,.25);
+  animation:hkdseRainbow 3s linear infinite,hkdsePulse .9s ease-in-out infinite,hkdseBrightness 1.4s ease-in-out infinite;
+}
+#hkdseBanner .hkdse-message{
+  position:relative;
+  z-index:2;
+  display:inline-block;
+  font-size:clamp(17px,2.6vw,28px);
+  line-height:1.25;
+  font-weight:1000;
+  letter-spacing:.04em;
+  color:#fff;
+  text-shadow:0 0 4px #fff,0 0 10px #fff,0 0 18px #ffef64,0 0 30px #ff4fd8;
+  animation:hkdseTextColor 1.8s linear infinite;
+}
+#hkdseBanner::before{
+  content:"";
+  position:absolute;
+  top:-35%;
+  left:-40%;
+  width:28%;
+  height:170%;
+  z-index:1;
+  pointer-events:none;
+  transform:skewX(-24deg);
+  background:linear-gradient(110deg,transparent 0%,rgba(255,255,255,.15) 25%,rgba(255,255,255,.95) 50%,rgba(255,255,255,.15) 75%,transparent 100%);
+  animation:hkdseSweep 1.65s linear infinite;
+}
+#hkdseBanner::after{
+  content:"✦  ✧  ✦  ✧  ✦";
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-around;
+  z-index:0;
+  color:rgba(255,255,255,.65);
+  font-size:clamp(17px,3vw,30px);
+  letter-spacing:1.4em;
+  animation:hkdseSparkle .8s steps(2,end) infinite;
+}
+@keyframes hkdseRainbow{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes hkdsePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.01)}}
+@keyframes hkdseBrightness{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}
+@keyframes hkdseTextColor{0%{color:#fff}20%{color:#fff86b}40%{color:#75fff2}60%{color:#ff9cec}80%{color:#b9ff75}100%{color:#fff}}
+@keyframes hkdseSweep{0%{left:-40%}100%{left:125%}}
+@keyframes hkdseSparkle{0%,100%{opacity:.25}50%{opacity:1}}
+@media(max-width:520px){#hkdseBanner{padding:12px 10px}#hkdseBanner .hkdse-message{letter-spacing:.01em}}
+@media(prefers-reduced-motion:reduce){#hkdseBanner,#hkdseBanner .hkdse-message,#hkdseBanner::before,#hkdseBanner::after{animation:none}}
+
 </style>
 </head>
 <body>
+
+<div id="hkdseBanner" role="status" aria-label="HKDSE congratulations">
+  <span class="hkdse-message">Congratulations Joshua Kam having excellent scores in HKDSE</span>
+</div>
+
 
 <!-- ============ ACCOUNT AUTHENTICATION ============ -->
 <div id="authScreen">
