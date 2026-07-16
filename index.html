@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IRON MANDATE — Local Space Expansion</title>
+<title>IRON MANDATE — Plane Economy & Prestige Rebalance</title>
 <style>
 :root{
   --bg:#0c0e0a; --panel:#141810; --raised:#1a2015; --sunken:#0f120c;
@@ -102,6 +102,11 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 .hqrow b{font-family:var(--mono)}
 #autoBox{margin-top:10px;padding:9px;border:1px solid var(--line);border-radius:5px;background:var(--sunken)}
 #autoBox .hd{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stop-assault{width:100%;margin-top:9px;padding:9px;border:1px solid #7a332d;border-radius:4px;
+  background:rgba(192,70,60,.08);color:var(--blood-hi);font-size:11px;font-weight:900;
+  letter-spacing:.14em;text-transform:uppercase}
+.stop-assault:hover:not(:disabled){background:rgba(192,70,60,.18);border-color:var(--blood-hi)}
+#stopAssaultInfo{margin-top:5px;text-align:center}
 .switch{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer}
 .switch input{accent-color:var(--brass)}
 
@@ -121,8 +126,15 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 #worldMap .homering{fill:none;stroke:var(--brass);stroke-width:1;stroke-dasharray:2 2}
 #mapLegend{padding:5px 10px;border-top:1px solid var(--line);color:var(--faint);font-size:11px}
 @media(prefers-reduced-motion:reduce){#worldMap .mk.tg{animation:none}}
-.planebtn{padding:6px 12px;font-size:12px;letter-spacing:.08em;border:1px solid var(--line);border-radius:4px;color:var(--dim);background:var(--sunken);font-weight:700}
+.planebtn{padding:5px 10px;font-size:12px;letter-spacing:.06em;border:1px solid var(--line);
+  border-radius:4px;color:var(--dim);background:var(--sunken);font-weight:700;
+  display:inline-flex;align-items:center;gap:7px}
 .planebtn.on{color:var(--brass-hi);border-color:var(--brass);background:rgba(201,162,39,.1)}
+.plane-thumb{width:34px;height:22px;display:inline-flex;position:relative;overflow:hidden;flex:none;
+  border:1px solid var(--line2);border-radius:3px;background:#090b08}
+.plane-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.plane-thumb .image-fallback{font-family:var(--mono);font-size:8px;color:var(--faint);
+  margin:auto;position:relative;z-index:0}
 .planebtn.lock{opacity:.4;cursor:not-allowed}
 #worldMap .mk.gated{stroke-dasharray:2 2;stroke:#555f4a}
 .res.mana .val{color:#b98fe0}
@@ -169,6 +181,13 @@ main{padding:14px;max-width:1280px;margin:0 auto}
 .country-flag.small{width:24px;height:17px;vertical-align:-4px;margin-right:4px}
 .country-flag img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .country-flag .flagfallback{position:relative;z-index:0;letter-spacing:.04em}
+.territory-visual{width:38px;height:25px;display:inline-flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;flex:none;border:1px solid var(--line2);border-radius:4px;
+  background:var(--sunken);font-family:var(--mono);font-size:8px;color:var(--faint);line-height:1}
+.territory-visual.small{width:26px;height:18px;vertical-align:-5px;margin-right:4px}
+.territory-visual img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.territory-visual.pokemon img{object-fit:contain;background:radial-gradient(circle,#24311c,#0a0d08)}
+.territory-visual .image-fallback{position:relative;z-index:0;letter-spacing:.04em}
 .cc .nm{font-weight:700;font-size:13.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cc .tier{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.05em}
 .cc .bloc{font-size:9.5px;letter-spacing:.1em;color:var(--steel);border:1px solid var(--line);border-radius:3px;padding:1px 4px;margin-top:4px;display:inline-block}
@@ -441,111 +460,9 @@ body.hc{--bg:#000;--panel:#0b0e08;--raised:#141811;--sunken:#050704;--line:#5565
 body.bigfont{font-size:17px}
 footer{padding:20px 14px 30px;text-align:center;color:var(--faint);font-size:11px;letter-spacing:.08em}
 kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-radius:3px;padding:1px 5px;background:var(--sunken)}
-
-/* ---------- HKDSE celebration banner ---------- */
-#hkdseBanner{
-  position:relative;
-  z-index:1000;
-  width:100%;
-  padding:15px 18px;
-  overflow:hidden;
-  text-align:center;
-  border-bottom:2px solid rgba(255,255,255,.75);
-  background:linear-gradient(90deg,#ff1f7a,#ffcc00,#15e8ff,#71ff56,#b65cff,#ff1f7a);
-  background-size:400% 400%;
-  box-shadow:0 0 18px rgba(255,255,255,.75),0 0 36px rgba(255,220,80,.45),inset 0 0 24px rgba(255,255,255,.25);
-  animation:hkdseRainbow 3s linear infinite,hkdsePulse .9s ease-in-out infinite,hkdseBrightness 1.4s ease-in-out infinite;
-}
-#hkdseBanner .hkdse-message{
-  position:relative;
-  z-index:2;
-  display:inline-block;
-  font-size:clamp(17px,2.6vw,28px);
-  line-height:1.25;
-  font-weight:1000;
-  letter-spacing:.04em;
-  color:#fff;
-  text-shadow:0 0 4px #fff,0 0 10px #fff,0 0 18px #ffef64,0 0 30px #ff4fd8;
-  animation:hkdseTextColor 1.8s linear infinite;
-}
-#hkdseBanner::before{
-  content:"";
-  position:absolute;
-  top:-35%;
-  left:-40%;
-  width:28%;
-  height:170%;
-  z-index:1;
-  pointer-events:none;
-  transform:skewX(-24deg);
-  background:linear-gradient(110deg,transparent 0%,rgba(255,255,255,.15) 25%,rgba(255,255,255,.95) 50%,rgba(255,255,255,.15) 75%,transparent 100%);
-  animation:hkdseSweep 1.65s linear infinite;
-}
-#hkdseBanner::after{
-  content:"✦  ✧  ✦  ✧  ✦";
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:space-around;
-  z-index:0;
-  color:rgba(255,255,255,.65);
-  font-size:clamp(17px,3vw,30px);
-  letter-spacing:1.4em;
-  animation:hkdseSparkle .8s steps(2,end) infinite;
-}
-@keyframes hkdseRainbow{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-@keyframes hkdsePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.01)}}
-@keyframes hkdseBrightness{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}
-@keyframes hkdseTextColor{0%{color:#fff}20%{color:#fff86b}40%{color:#75fff2}60%{color:#ff9cec}80%{color:#b9ff75}100%{color:#fff}}
-@keyframes hkdseSweep{0%{left:-40%}100%{left:125%}}
-@keyframes hkdseSparkle{0%,100%{opacity:.25}50%{opacity:1}}
-@media(max-width:520px){#hkdseBanner{padding:12px 10px}#hkdseBanner .hkdse-message{letter-spacing:.01em}}
-
-#hkdseBanner .hkdse-close{
-  position:absolute;
-  top:50%;
-  right:10px;
-  z-index:3;
-  transform:translateY(-50%);
-  width:28px;
-  height:28px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  border:1px solid rgba(255,255,255,.85);
-  border-radius:50%;
-  background:rgba(0,0,0,.32);
-  color:#fff;
-  font-size:16px;
-  font-weight:900;
-  line-height:1;
-  cursor:pointer;
-  box-shadow:0 0 10px rgba(255,255,255,.45);
-}
-#hkdseBanner .hkdse-close:hover{
-  background:rgba(0,0,0,.55);
-  transform:translateY(-50%) scale(1.08);
-}
-#hkdseBanner .hkdse-close:focus-visible{
-  outline:2px solid #fff;
-  outline-offset:2px;
-}
-#hkdseBanner[hidden]{
-  display:none!important;
-}
-
-@media(prefers-reduced-motion:reduce){#hkdseBanner,#hkdseBanner .hkdse-message,#hkdseBanner::before,#hkdseBanner::after{animation:none}}
-
 </style>
 </head>
 <body>
-
-<div id="hkdseBanner" role="status" aria-label="HKDSE congratulations">
-  <span class="hkdse-message">Congratulations Joshua Kam having excellent scores in HKDSE</span>
-  <button class="hkdse-close" id="hkdseClose" type="button" aria-label="Hide congratulations banner" title="Hide banner">×</button>
-</div>
-
 
 <!-- ============ ACCOUNT AUTHENTICATION ============ -->
 <div id="authScreen">
@@ -681,6 +598,8 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
           <div class="hd"><b style="font-size:12px;letter-spacing:.1em">AUTO-ASSAULT</b>
             <label class="switch"><input type="checkbox" id="autoTgl" disabled><span id="autoState">locked</span></label></div>
           <div class="small" id="autoInfo">Research <b>General Staff</b> to automate attacks. Click a nation's name to set the target; with no target it strikes the weakest foe.</div>
+          <button id="stopAssaultBtn" class="stop-assault" type="button" disabled>Stop active assault</button>
+          <div class="small" id="stopAssaultInfo">No assault is active.</div>
         </div>
       </div>
       <div class="panel" id="warmap">
@@ -709,7 +628,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
         <div class="optgrid" id="branchGrid"></div>
       </div>
       <div class="sect panel">
-        <div class="ptitle">Construction</div>
+        <div class="ptitle">Construction <span class="r" id="constructionScaleLbl"></span></div>
         <div class="optgrid" id="buildGrid"></div>
       </div>
       <div class="sect panel">
@@ -941,7 +860,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-
       </div>
     </section>
   </main>
-  <footer>Country flag images: FlagCDN / Flagpedia.<br>IRON MANDATE · authenticated server saves · global validated leaderboards</footer>
+  <footer>Country flags: FlagCDN / Flagpedia. Plane and territory artwork loads from Wikimedia Commons, Unsplash and PokéAPI-hosted sprites.<br>IRON MANDATE · authenticated server saves · global validated leaderboards</footer>
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal">
@@ -1174,13 +1093,71 @@ C('nz','New Zealand','🇳🇿','OC',3,5.2,'PA'),C('au','Australia','🇦🇺','
 const CBY={};for(const c of COUNTRIES)CBY[c.code]=c;
 function defOf(c){return c.def?c.def:50*Math.pow(9,c.tier)*(c.code==='us'?3:1);}
 const TIERMULT=[10,8,6,4.5,3.2,2.2,1.6,1.25,1.1,1];
+const PLANE_ART={
+ earth:['https://commons.wikimedia.org/wiki/Special:FilePath/The_Earth_seen_from_Apollo_17.jpg?width=240'],
+ space:[
+  'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=240&h=160&q=72',
+  'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=240&h=160&q=72',
+  'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=240&h=160&q=72'
+ ],
+ magic:[
+  'https://images.unsplash.com/photo-1533154683836-84ea7a0bc310?auto=format&fit=crop&w=240&h=160&q=72',
+  'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=240&h=160&q=72',
+  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=240&h=160&q=72'
+ ],
+ cult:[
+  'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?auto=format&fit=crop&w=240&h=160&q=72',
+  'https://images.unsplash.com/photo-1528360983277-13d401cdc186?auto=format&fit=crop&w=240&h=160&q=72',
+  'https://images.unsplash.com/photo-1536599018102-9f803c140fc1?auto=format&fit=crop&w=240&h=160&q=72'
+ ],
+ future:[
+  'https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=240&h=160&q=72',
+  'https://images.unsplash.com/photo-1518005020951-eccb494ad742?auto=format&fit=crop&w=240&h=160&q=72',
+  'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=240&h=160&q=72'
+ ],
+ pokemon:[]
+};
+const POKEMON_TERRITORY_DEX=[25,6,9,150,249,250,384,483,484,487,643,644,646,716,717,791,792,890];
 const PLANES=[
- {id:'earth',n:'Earth',ico:'🌍',feat:'Blocs, pacts & world tension rule this plane'},
- {id:'space',n:'Solar Dominion',ico:'🚀',feat:'SUPPLY LINES — a body can only be besieged from an adjacent held body'},
- {id:'magic',n:'Arcane Expanse',ico:'🔮',feat:'MANA & SPELLS — territories yield Mana; cast Firestorm, Ward and Mind Fracture'},
- {id:'cult',n:'Ascendant Peaks',ico:'☯',feat:'TRIBULATIONS — each summit demands a minimum cultivation stage'},
- {id:'future',n:'Chrono Frontier',ico:'🤖',feat:'TEMPORAL FLUX — defenses oscillate ±40%; time your strikes'},
- {id:'pokemon',n:'Pokémon World',ico:'🔴',feat:'SEVEN-REGION LEAGUE — Mega Evolution and Island-powered Z-Moves reshape decisive battles'}];
+ {id:'earth',n:'Earth',art:PLANE_ART.earth[0],feat:'Blocs, pacts & world tension rule this plane'},
+ {id:'space',n:'Solar Dominion',art:PLANE_ART.space[0],feat:'SUPPLY LINES — a body can only be besieged from an adjacent held body'},
+ {id:'magic',n:'Arcane Expanse',art:PLANE_ART.magic[0],feat:'MANA & SPELLS — territories yield Mana; cast Firestorm, Ward and Mind Fracture'},
+ {id:'cult',n:'Ascendant Peaks',art:PLANE_ART.cult[0],feat:'TRIBULATIONS — each summit demands a minimum cultivation stage'},
+ {id:'future',n:'Chrono Frontier',art:PLANE_ART.future[0],feat:'TEMPORAL FLUX — defenses oscillate ±40%; time your strikes'},
+ {id:'pokemon',n:'Pokémon World',art:'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png',feat:'SEVEN-REGION LEAGUE — Mega Evolution and Island-powered Z-Moves reshape decisive battles'}];
+function stableArtIndex(value,length){
+  let h=2166136261;
+  for(let i=0;i<String(value).length;i++){
+    h^=String(value).charCodeAt(i);
+    h=Math.imul(h,16777619);
+  }
+  return length?Math.abs(h>>>0)%length:0;
+}
+function territoryVisualUrl(c){
+  const plane=c.plane||'earth';
+  if(plane==='earth')return countryFlagUrl(c.code);
+  if(plane==='pokemon'){
+    const dex=POKEMON_TERRITORY_DEX[stableArtIndex(c.code,POKEMON_TERRITORY_DEX.length)];
+    return'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/'+dex+'.png';
+  }
+  const choices=PLANE_ART[plane]||PLANE_ART.space;
+  return choices[stableArtIndex(c.code,choices.length)];
+}
+function territoryVisualHtml(c,size){
+  if(!c)return'';
+  if(!c.plane||c.plane==='earth')return countryFlagHtml(c,size);
+  const label=htmlEscape(c.name||c.code);
+  const plane=htmlEscape(c.plane||'other');
+  return'<span class="territory-visual '+plane+(size==='small'?' small':'')+'" title="Representative art for '+label+'">'+
+    '<span class="image-fallback">'+htmlEscape(String(c.code||'').slice(0,3).toUpperCase())+'</span>'+
+    '<img src="'+territoryVisualUrl(c)+'" alt="Representative art for '+label+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'+
+    '</span>';
+}
+function planeVisualHtml(pl){
+  const label=htmlEscape(pl.n);
+  return'<span class="plane-thumb"><span class="image-fallback">'+htmlEscape(pl.id.slice(0,2).toUpperCase())+'</span>'+
+    '<img src="'+pl.art+'" alt="'+label+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></span>';
+}
 function T(code,n,ico,plane,tier,def,pos,x){const t={code,n:n,name:n,flag:ico,region:plane,plane,tier,def,pop:def*1e-9,pos,bloc:null};
   if(x)Object.assign(t,x);return t;}
 const TERR=[];
@@ -1517,13 +1494,13 @@ const LAWS={
  ext:{n:'Extensive Conscription',mp:1.7,g:0.75,req:15,d:'+70% manpower · −25% gold · needs 15% tension'},
  tot:{n:'Total Mobilization',mp:2.8,g:0.4,req:40,d:'+180% manpower · −60% gold · needs 40% tension'}};
 const BUILDINGS=[
- {id:'off',ico:'🏢',n:'Recruitment Office',base:15,d:'+0.5 manpower / sec each'},
+ {id:'off',ico:'🏢',n:'Recruitment Office',base:15,d:'+1.25 manpower / sec each; gains the square root of the current industrial plane scale.'},
  {id:'bar',ico:'⛺',n:'Barracks',base:60,d:'+1 click power each'},
- {id:'civ',ico:'🏭',n:'Civilian Factory',base:400,d:'+8 gold / sec each'},
- {id:'mil',ico:'🔧',n:'Military Factory',base:2500,d:'+3 equipment / sec each (equipment multiplies army power)'},
- {id:'aca',ico:'📜',n:'Arcane Academy',base:60000,d:'+6 Mana / sec each',plane:'magic'},
- {id:'well',ico:'🔮',n:'Mana Well',base:900000,d:'+30 Mana / sec each',plane:'magic'},
- {id:'shrine',ico:'🛕',n:'Dao Shrine',base:5e6,d:'+8 Qi / sec each',plane:'cult'}];
+ {id:'civ',ico:'🏭',n:'Civilian Factory',base:400,d:'+25 gold / sec each; industrial output scales ×4 whenever a new plane opens.'},
+ {id:'mil',ico:'🔧',n:'Military Factory',base:2500,d:'+12 equipment / sec each; industrial output scales ×4 whenever a new plane opens.'},
+ {id:'aca',ico:'📜',n:'Arcane Academy',base:60000,d:'+6 Mana / sec each, multiplied by the current industrial plane scale.',plane:'magic'},
+ {id:'well',ico:'🔮',n:'Mana Well',base:900000,d:'+30 Mana / sec each, multiplied by the current industrial plane scale.',plane:'magic'},
+ {id:'shrine',ico:'🛕',n:'Dao Shrine',base:5e6,d:'+8 Qi / sec each, multiplied by the current industrial plane scale.',plane:'cult'}];
 const TECHS=[
  {id:'w1',ico:'🔫',n:'Infantry Weapons I',cost:200,t:'pow',v:1.5,d:'Army power ×1.5'},
  {id:'log1',ico:'🚚',n:'Field Logistics',cost:900,t:'cas',v:0.75,d:'Casualties −25%'},
@@ -2435,19 +2412,50 @@ function armyPower(){const t=S.tr||{};
   return normal*powAll()*pokeMultFor(target);
 }
 function clickPow(){return (1+S.b.bar)*lawM().mp*(1+shopLvl('presence'))*(hasLegend('reshiram')?2:1)*(hasLegend('tapukoko')?1.3:1)*(S.ch.tiny?0.5:1);}
+function constructionScale(){
+  return Math.pow(4,Math.max(0,planesUnlockedCount()-1));
+}
+function equipmentIncomeMult(){
+  return prodMult()*(1+0.5*shopLvl('quartermaster'))*
+    (hasLegend('kyogre')?1.3:1)*(hasLegend('zekrom')?1.35:1);
+}
+function territoryYield(c){
+  if(!c)return{m:0,g:0,e:0};
+  if(!c.plane||c.plane==='earth'){
+    const base=Math.pow(2.7,c.tier);
+    return{m:0.4*base,g:1.2*base,e:0.18*base};
+  }
+  const ex=c.plane==='pokemon'?0.93:0.72;
+  const k=c.plane==='pokemon'?4e-8:1e-6;
+  const base=Math.pow(defOf(c),ex)*k;
+  const idx=Math.max(1,planeIdx(c.plane));
+  return{m:base,g:base*6,e:base*(0.35+0.12*idx)};
+}
 function rates(){let mps=0,gps=0,eps=0,qps=0,mana=0;const now=Date.now();
-  for(const c of COUNTRIES){if(!S.conq[c.code]||S.rebels[c.code]>now)continue;
-    mps+=0.4*Math.pow(2.7,c.tier);gps+=1.2*Math.pow(2.7,c.tier);}
-  for(const t of TERR){if(!S.conq[t.code])continue;
-    const ex=t.plane==='pokemon'?0.93:0.72,k=t.plane==='pokemon'?4e-8:1e-6;
-    mps+=Math.pow(t.def,ex)*k;gps+=Math.pow(t.def,ex)*k*6;
-    if(t.manaps)mana+=t.manaps;if(t.qips)qps+=t.qips;}
+  for(const c of COUNTRIES){
+    if(!S.conq[c.code]||S.rebels[c.code]>now)continue;
+    const y=territoryYield(c);mps+=y.m;gps+=y.g;eps+=y.e;
+  }
+  for(const t of TERR){
+    if(!S.conq[t.code])continue;
+    const y=territoryYield(t);mps+=y.m;gps+=y.g;eps+=y.e;
+    if(t.manaps)mana+=t.manaps;if(t.qips)qps+=t.qips;
+  }
   const home=CBY[S.startCode];
   if(home&&!(S.rebels[home.code]>now))mps+=home.pop*0.05;
-  mps+=S.b.off*0.5;gps+=S.b.civ*8;
-  eps+=S.b.mil*3*prodMult()*(1+0.5*shopLvl('quartermaster'))*(hasLegend('kyogre')?1.3:1)*(hasLegend('zekrom')?1.35:1);
-  if(magicUnlocked()){mana+=S.b.aca*6+S.b.well*30;mana*=(1+0.4*shopLvl('manaflow'))*prodMult()*(hasLegend('kyogre')?1.2:1)*(hasLegend('tapufini')?1.15:1);}else mana=0;
-  if(cultUnlocked()){qps+=S.b.shrine*8;qps*=(1+0.25*S.realm)*(1+0.4*shopLvl('dao'))*prodMult();}else qps=0;
+  const scale=constructionScale();
+  mps+=S.b.off*1.25*Math.sqrt(scale);
+  gps+=S.b.civ*25*scale;
+  eps+=S.b.mil*12*scale;
+  eps*=equipmentIncomeMult();
+  if(magicUnlocked()){
+    mana+=(S.b.aca*6+S.b.well*30)*scale;
+    mana*=(1+0.4*shopLvl('manaflow'))*prodMult()*(hasLegend('kyogre')?1.2:1)*(hasLegend('tapufini')?1.15:1);
+  }else mana=0;
+  if(cultUnlocked()){
+    qps+=S.b.shrine*8*scale;
+    qps*=(1+0.25*S.realm)*(1+0.4*shopLvl('dao'))*prodMult();
+  }else qps=0;
   return{mps:mps*mpMult(),gps:gps*goldMult(),eps,qps,mana};}
 function aliveAllies(c){if(!c.bloc)return 0;let n=0;
   for(const o of COUNTRIES)if(o.bloc===c.bloc&&o.code!==c.code&&!S.conq[o.code])n++;return n;}
@@ -2494,6 +2502,16 @@ function entrench(c,info){return defOf(c)*info.aF*info.fx*(info.rs||1)*(1-defRed
 function setSiege(code){const c=BY[code];if(!c||S.conq[code])return;
   const gate=canSiege(c);if(gate){toast('🔒 '+c.name,gate,'bad');return;}
   if(S.target!==code){S.target=code;refreshTargets();}}
+function stopAssault(){
+  if(!S||!S.target||S.conq[S.target])return;
+  const c=BY[S.target];
+  S.target=null;
+  S.casAcc=0;
+  S.stAcc=0;
+  refreshTargets();
+  updateCards();
+  toast('Assault halted',(c?c.name:'The target')+' is no longer under active siege. Its defenses will begin repairing.','');
+}
 function applyCasualties(info,AP,f){if(AP>=info.eff*40)return 0;
   if(S.shieldUntil>Date.now())return 0;
   const frac=info.eff/(info.eff+AP)*f*casMult();
@@ -2558,14 +2576,18 @@ function combatTick(dt){const code=S.target;
     S.hp[k]=Math.min(D,S.hp[k]+D*0.025*dt);
     if(S.hp[k]>=D)delete S.hp[k];}}
 function conquer(c){S.conq[c.code]=1;delete S.hp[c.code];
-  let loot,rec;
+  let loot,rec,equipLoot;
   if(c.plane){loot=Math.pow(defOf(c),0.72)*50*goldMult();
-    rec=Math.pow(defOf(c),0.6)*10*mpMult();}
-  else{loot=defOf(c)*0.3*goldMult();rec=c.pop*800*mpMult();}
-  if(hasLegend('palkia')){loot*=1.35;rec*=1.35;}if(megaZygardeActive()){loot*=5;rec*=3;}if(hasLegend('zygarde'))loot*=1.20;
-  if(S.warpath){loot*=3;rec*=3;S.warpath=false;
+    rec=Math.pow(defOf(c),0.6)*10*mpMult();
+    equipLoot=rec*(0.45+0.08*Math.max(1,planeIdx(c.plane)));}
+  else{loot=defOf(c)*0.3*goldMult();rec=c.pop*800*mpMult();equipLoot=rec*0.25;}
+  equipLoot*=1+0.25*shopLvl('quartermaster');
+  if(hasLegend('palkia')){loot*=1.35;rec*=1.35;equipLoot*=1.35;}
+  if(megaZygardeActive()){loot*=5;rec*=3;equipLoot*=3;}
+  if(hasLegend('zygarde'))loot*=1.20;
+  if(S.warpath){loot*=3;rec*=3;equipLoot*=3;S.warpath=false;
     toast('🌀 Phase-strike','Teleportation Legions triple the spoils of '+c.name+'.','cyan');}
-  S.gold+=loot;S.st.goldE+=loot;S.mp+=rec;S.st.mpRec+=rec;S.st.won++;META.lifeWon++;
+  S.gold+=loot;S.st.goldE+=loot;S.mp+=rec;S.st.mpRec+=rec;S.equip+=equipLoot;S.st.won++;META.lifeWon++;
   S.renown+=Math.pow(c.tier+1,2);
   if(c.plane==='pokemon'&&c.badge&&!S.badges[c.code]){S.badges[c.code]=1;S.poke.balls+=2;S.poke.shards+=3;if(c.pregion==='kalos'&&badgeCount('kalos')%2===0)S.poke.megaStones++;
     const bd=BADGES.find(b=>b[0]===c.code);toast((bd?bd[1]:'🏅')+' BADGE EARNED',(bd?bd[3]+' '+bd[2]:'League')+' Badge secured · +2 Poké Balls · +3 Evolution Shards · capture chance improved.','grn');}
@@ -2573,7 +2595,7 @@ function conquer(c){S.conq[c.code]=1;delete S.hp[c.code];
   S.tension=Math.min(100,S.tension+(c.tier+1)*1.1);
   if(S.target===c.code)S.target=null;
   const g=cmdGen();if(g)g.xp+=c.tier;
-  toast('🏳️ '+c.name+' has fallen','Loot '+fmt(loot)+' gold · '+fmt(rec)+' recruits rally to you','grn');
+  toast('🏳️ '+c.name+' has fallen','Loot '+fmt(loot)+' gold · '+fmt(rec)+' recruits · '+fmt(equipLoot)+' equipment salvaged','grn');
   sfx('conq');confettiAtCard(c.code);rebuildCard(c.code);
   regionCheck(c.region);renderPacts();updateRegionTabs();
   planeCheck(c.plane||'earth');victoryCheck();}
@@ -2583,7 +2605,7 @@ function planeCheck(id){if(S.pc[id]||!planeClearedId(id))return;
     unlockEnding('mil','Military Domination');
     if(S.ch.nocas&&!S.chFail.nocas)unlockEnding('peace','One World Government');}
   const nxt=PLANES[i+1];
-  if(nxt){toast('🌀 '+PLANES[i].n.toUpperCase()+' IS YOURS','The veil tears open: the '+nxt.ico+' '+nxt.n+' awaits. '+nxt.feat,'cyan');
+  if(nxt){toast(PLANES[i].n.toUpperCase()+' IS YOURS','The veil tears open: the '+nxt.n+' awaits. '+nxt.feat,'cyan');
     if(nxt.id==='cult'&&S.realm<1){S.realm=1;
       toast('☯️ The Dao stirs','Qi Gathering begins — breakthroughs are now possible in the Cultivation tab.','cyan');}
     if(nxt.id==='magic')toast('🔮 Mana awakens','Arcane territories yield Mana; the Spells tab is open.','cyan');}
@@ -2699,12 +2721,28 @@ function advanceRealm(){const nxt=REALMS[S.realm+1];if(!nxt||S.realm<1)return;
 
 /* ================= prestige ================= */
 function startTierCap(){return Math.min(9,1+2*META.prestiges);}
+const PRESTIGE_PLANE_WEIGHTS=[1,4,16,64,256,1024];
+function prestigeMandateScore(){
+  let score=0;const detail=[];
+  for(let i=0;i<PLANES.length;i++){
+    const pl=PLANES[i],list=planeTerrs(pl.id);
+    const held=list.reduce((n,t)=>n+(S.conq[t.code]?1:0),0);
+    const weight=PRESTIGE_PLANE_WEIGHTS[i];
+    const contribution=list.length?(held/list.length)*COUNTRIES.length*weight:0;
+    score+=contribution;
+    detail.push({id:pl.id,name:pl.n,held,total:list.length,weight,contribution});
+  }
+  return{score,detail};
+}
 function ppCalc(){const n=conqCount();let ch=1;const ok={};
   ok.nocas=S.ch.nocas&&!S.chFail.nocas;ok.speed=S.ch.speed&&S.playSec<=1500;ok.tiny=S.ch.tiny;
   if(ok.nocas)ch*=2.5;if(ok.speed)ch*=2;if(ok.tiny)ch*=2;
   const planes=Object.keys(S.pc||{}).length;
-  let pp=Math.pow(n,1.25)*ch*Math.pow(2.2,planes)/4;
-  return{pp:n>=10?Math.floor(pp):0,n,ch,ok,planes,full:S.won};}
+  const mandate=prestigeMandateScore();
+  const completion=1+1.2*planes;
+  const pp=Math.pow(mandate.score,1.25)*ch*completion/4;
+  return{pp:n>=10?Math.floor(pp):0,n,ch,ok,planes,full:S.won,
+    score:mandate.score,detail:mandate.detail,completion};}
 function makeSeed(){const r=ppCalc();
   return btoa(unescape(encodeURIComponent(JSON.stringify(
     {v:1,s:S.startCode,ch:S.ch,pp:r.pp,pl:Object.keys(S.pc).length,t:Math.floor(S.playSec)}))));}
@@ -2733,15 +2771,17 @@ function buyShop(id){const it=SHOP.find(x=>x.id===id);const l=shopLvl(id);
 
 /* ================= events & raids ================= */
 function fireEvent(){const rt=rates();const roll=Math.random();
-  if(roll<0.22){const a=Math.floor(45*rt.gps+500);S.gold+=a;S.st.goldE+=a;
+  if(roll<0.18){const a=Math.floor(45*rt.gps+500);S.gold+=a;S.st.goldE+=a;
     toast('🪙 Trade windfall','+'+fmt(a)+' gold flows into the treasury.','grn');}
-  else if(roll<0.44){const a=Math.floor(30*rt.mps+120);S.mp+=a;S.st.mpRec+=a;
+  else if(roll<0.36){const a=Math.floor(30*rt.mps+120);S.mp+=a;S.st.mpRec+=a;
     toast('🪖 Volunteer surge','+'+fmt(a)+' recruits answer the call.','grn');}
-  else if(roll<0.6){const un=TECHS.filter(t=>!S.tech[t.id]&&!techLocked(t));
+  else if(roll<0.54){const a=Math.floor(45*rt.eps+120*constructionScale()+250);S.equip+=a;
+    toast('⚙️ Arsenal shipment','+'+fmt(a)+' equipment reaches the depots.','grn');}
+  else if(roll<0.68){const un=TECHS.filter(t=>!S.tech[t.id]&&!techLocked(t));
     if(un.length){un.sort((a,b)=>a.cost-b.cost);const t=un[0];S.disc={id:t.id,off:0.35};
       toast('💡 Breakthrough',t.n+' research is 35% off until purchased.','cyan');renderTechs();}
     else{const a=Math.floor(30*rt.gps+400);S.gold+=a;toast('🪙 Windfall','+'+fmt(a)+' gold.','grn');}}
-  else if(roll<0.82){const held=COUNTRIES.filter(c=>S.conq[c.code]&&c.code!==S.startCode&&!(S.rebels[c.code]>Date.now()));
+  else if(roll<0.86){const held=COUNTRIES.filter(c=>S.conq[c.code]&&c.code!==S.startCode&&!(S.rebels[c.code]>Date.now()));
     if(held.length){const c=pick(held);const cost=Math.ceil(20*Math.pow(2.5,c.tier));
       showModal('🔥 REBELLION IN '+c.name.toUpperCase(),
         '<p>Partisans in <b>'+c.name+'</b> rise against the occupation. Crush them now, or the province produces nothing for 75 seconds.</p>',
@@ -2949,7 +2989,7 @@ function renderPlaneRow(){const w=$('planeRow');if(!w)return;w.innerHTML='';
   for(const pl of PLANES){const b=document.createElement('button');
     const un=planeUnlockedId(pl.id);
     b.className='planebtn'+(S.plane===pl.id?' on':'')+(un?'':' lock');
-    b.textContent=pl.ico+' '+pl.n+(S.pc[pl.id]?' ✔':'');
+    b.innerHTML=planeVisualHtml(pl)+'<span>'+htmlEscape(pl.n)+(S.pc[pl.id]?' ✓':'')+'</span>';
     b.title=un?pl.feat:'Conquer the previous plane to tear this veil open';
     b.onclick=()=>{if(!un){toast('🔒 '+pl.n,'Conquer the previous plane first.','bad');return;}
       S.plane=pl.id;renderPlaneRow();buildGrid();buildMap();resetVB();updateRegionTabs();applyFilter();};
@@ -2965,14 +3005,14 @@ function buildGrid(){const g=$('grid');g.innerHTML='';CARDS={};
 function fillCard(code){const c=BY[code],R=CARDS[code],el=R.el;
   el.className='cc'+(S.conq[code]?' done':'');
   if(S.conq[code]){
-    el.innerHTML='<div class="hd">'+countryFlagHtml(c)+'<span class="nm">'+c.name+
+    el.innerHTML='<div class="hd">'+territoryVisualHtml(c)+'<span class="nm">'+c.name+
       '</span><span class="tier">T'+c.tier+'</span></div>'+
       (code===S.startCode?'<span class="home">HOME</span>':'<span class="rebel hidden">REBELLION</span>')+
       '<div class="occ">■ OCCUPIED</div><div class="inc"></div>';
     R.rebel=el.querySelector('.rebel');R.inc=el.querySelector('.inc');
     R.bar=R.eff=R.cas=R.btn=null;
   }else{
-    el.innerHTML='<div class="hd" title="Set as auto-assault target">'+countryFlagHtml(c)+
+    el.innerHTML='<div class="hd" title="Set as auto-assault target">'+territoryVisualHtml(c)+
       '</span><span class="nm">'+c.name+'</span><span class="tier">T'+c.tier+'</span></div>'+
       (c.bloc?'<span class="bloc">'+BLOCS[c.bloc]+'</span>':'')+
       (c.ptype?'<span class="ptype">'+PTYPES[c.ptype]+'</span>':'')+
@@ -3019,9 +3059,10 @@ function updateCards(){const now=Date.now();
   for(const code in CARDS){const R=CARDS[code],c=BY[code];
     if(S.conq[code]){
       if(R.rebel)R.rebel.classList.toggle('hidden',!(S.rebels[code]>now));
-      if(R.inc){const paused=S.rebels[code]>now;
+      if(R.inc){const paused=S.rebels[code]>now,y=territoryYield(c);
         R.inc.textContent=paused?'⚠ production halted':
-          '+'+fmt(1.2*Math.pow(2.7,c.tier)*goldMult())+' 🪙 · +'+fmt(0.4*Math.pow(2.7,c.tier)*mpMult())+' 🪖 /s';}
+          '+'+fmt(y.g*goldMult())+' 🪙 · +'+fmt(y.m*mpMult())+' 🪖 · +'+
+          fmt(y.e*equipmentIncomeMult())+' ⚙️ /s';}
       continue;}
     const info=effInfo(c),gate=canSiege(c);
     R.bar.style.width=(clamp(info.rem/defOf(c),0,1)*100)+'%';
@@ -3087,12 +3128,17 @@ function renderBuildings(){const g=$('buildGrid');g.innerHTML='';BREFS={};
       c:d.querySelector('.c'),btn:d.querySelector('.buy')};
     g.appendChild(d);}
   updateBuildings();}
-function updateBuildings(){for(const b of BUILDINGS){const R=BREFS[b.id];if(!R)continue;
-  const n=buyNFor(b),nn=Math.max(1,n),cost=bCost(b,nn);
-  R.cnt.textContent=S.b[b.id];
-  R.bl.textContent='Build ×'+(S.buyN==='max'?n:S.buyN);
-  R.c.textContent=fmt(cost)+' 🪙';
-  R.btn.disabled=(S.buyN==='max')?n<1:S.gold<cost;}}
+function updateBuildings(){
+  const scaleLbl=$('constructionScaleLbl');
+  if(scaleLbl)scaleLbl.textContent='industrial plane scale ×'+fmt(constructionScale());
+  for(const b of BUILDINGS){const R=BREFS[b.id];if(!R)continue;
+    const n=buyNFor(b),nn=Math.max(1,n),cost=bCost(b,nn);
+    R.cnt.textContent=S.b[b.id];
+    R.bl.textContent='Build ×'+(S.buyN==='max'?n:S.buyN);
+    R.c.textContent=fmt(cost)+' 🪙';
+    R.btn.disabled=(S.buyN==='max')?n<1:S.gold<cost;
+  }
+}
 function renderTechs(){const g=$('techGrid');g.innerHTML='';TREFS={};
   for(const t of TECHS){const d=document.createElement('div');d.className='oc';
     const owned=!!S.tech[t.id];
@@ -3275,7 +3321,8 @@ async function renderBoards(){
 }
 function updatePrestige(){const r=ppCalc();
   $('ppPot').textContent=fmt(r.pp);
-  $('ppMath').textContent=r.n+' territories^1.25 × doctrines ×'+r.ch+' × plane multiplier ×'+Math.pow(2.2,r.planes).toFixed(2)+' ÷ 4';
+  $('ppMath').textContent=r.n+' territories · weighted mandate '+fmt(r.score)+' · doctrines ×'+r.ch+
+    ' · completed-plane bonus ×'+r.completion.toFixed(2)+' · each later plane is worth ×4';
   const cl=$('chalLine');cl.innerHTML='';
   [['nocas','🩸 Bloodless'],['speed','⚡ Lightning'],['tiny','🪶 Austere']].forEach(p=>{
     if(!S.ch[p[0]])return;const s=document.createElement('span');
@@ -3305,11 +3352,15 @@ function updateTop(){const rt=rates(),AP=armyPower();
   $('hqLife').textContent=timeFmt(lifespan())+(S.realm>0?' (×'+LIFE[S.realm]+')':'');
   $('hqHeld').textContent=conqCount()+' / '+ALLT.length;
   $('clickLbl').textContent='+'+fmt(clickPow())+' manpower';
+  const stopBtn=$('stopAssaultBtn'),stopInfo=$('stopAssaultInfo');
+  const activeTarget=S.target&&!S.conq[S.target]?BY[S.target]:null;
+  stopBtn.disabled=!activeTarget;
+  stopInfo.textContent=activeTarget?('Active siege: '+activeTarget.name):'No assault is active.';
   const at=$('autoTgl'),has=!!S.tech.staff;at.disabled=!has;
   if(!has)$('autoState').textContent='locked';
   else{at.checked=S.auto;$('autoState').textContent=S.auto?'ON':'off';
     $('autoInfo').innerHTML=S.auto
-      ?('Besieging <b>'+(S.target&&!S.conq[S.target]?BY[S.target].flag+' '+BY[S.target].name:'the weakest foe')+'</b>; the next target is chosen automatically.')
+      ?('Besieging <b>'+(S.target&&!S.conq[S.target]?territoryVisualHtml(BY[S.target],'small')+BY[S.target].name:'the weakest foe')+'</b>; the next target is chosen automatically.')
       :'Sieges continue on their own; this picks the next target when one falls. Click the map or a nation&#39;s name to aim.';}
   const rc=recruitCostG();
   $('recruitCost').textContent=fmt(rc.g)+' 🪙 + '+fmt(rc.m)+' 🪖';
@@ -3368,7 +3419,7 @@ const HINTS=[
  {t:'Defeat 5 nations. Watch ☠ (losses per second) and ⏱ (siege time) — abandoned nations repair 2%/s.',ok:()=>S.st.won>=5},
  {t:'Research <b>Infantry Weapons I</b> under Nation → Research.',ok:()=>!!S.tech.w1},
  {t:'Commission a general. Combat officers multiply your power — <b>and can die permanently</b>.',ok:()=>S.gens.length>0||S.st.gensLost>0},
- {t:'Clear all of Earth to tear open the 🚀 Solar Dominion — five stranger realms lie beyond it.',ok:()=>!!S.pc.earth},
+ {t:'Clear all of Earth to tear open the Solar Dominion — five stranger realms lie beyond it.',ok:()=>!!S.pc.earth},
  {t:'At 10+ nations, the <b>Prestige</b> tab opens the Eternal Throne — reset for permanent power.',ok:()=>conqCount()>=10}];
 function updateHint(){const bar=$('hintBar');
   if(META.tut||!S){bar.classList.add('hidden');return;}
@@ -3380,7 +3431,7 @@ function buildCodex(){$('codex').innerHTML=
  '<p><b class="gold">Manpower 🪖</b> is your army. Army power = manpower × every multiplier (tech, equipment, realm, commander, arsenal, unified regions). Attacks never spend troops directly — <b class="red">casualties</b> do, scaling with how tough the target is relative to you. At <b class="grn">40× superiority</b> a nation falls bloodlessly (the ☠ estimate turns green at 0%).</p>'+
  '<p style="margin-top:8px"><b class="gold">Conquest is a siege.</b> One nation at a time: while targeted it takes 12% of your army power as damage per second (⏱ shows the ETA — more manpower means faster sieges), you bleed ☠%/s of manpower, and pressing Assault storms the walls for a burst of extra damage. Nations you abandon repair 2% of their defense per second. Bloc members get +22% defense per living ally — sign a <b>pact</b> to silence a bloc for 10 minutes, or defeat its members. Falling nations pay loot and recruits, then feed passive income forever (unless rebelling). Conquest raises <b>world tension</b>: it unlocks harsher conscription laws but invites border raids above 25%.</p>'+
  '<p style="margin-top:8px"><b class="gold">Generals 🎖</b> come in five ranks. A <i>combat</i> officer given command multiplies all power; <i>economy</i> and <i>logistics</i> officers help passively. Commanders gain XP and levels from battle but face <b class="red">permadeath</b> when you strike above your weight — Praetorian Guard research and Core Formation realm halve and soften the risk.</p>'+
- '<p style="margin-top:8px"><b class="gold">Six planes.</b> Clearing a plane tears open the next: 🌍 Earth → 🚀 <b>Solar Dominion</b> (supply lines — bodies fall only from adjacent held bodies) → 🔮 <b>Arcane Expanse</b> (territories yield <b style="color:#b98fe0">Mana</b>; unlocks the Spells tab, Arcane Academies and Mana Wells) → ☯ <b class="cyan">Ascendant Peaks</b> (unlocks Qi, Dao Shrines and cultivation breakthroughs; every summit demands a minimum realm — tribulations) → 🤖 <b>Chrono Frontier</b> (temporal flux: defenses swing ±40%, so strike at the ebb). Each plane also unlocks a colossal power tech. Prestige multiplies ×2 per plane cleared.</p>'+
+ '<p style="margin-top:8px"><b class="gold">Six planes.</b> Clearing a plane tears open the next: Earth → <b>Solar Dominion</b> (supply lines — bodies fall only from adjacent held bodies) → <b>Arcane Expanse</b> (territories yield <b style="color:#b98fe0">Mana</b>; unlocks the Spells tab, Arcane Academies and Mana Wells) → <b class="cyan">Ascendant Peaks</b> (unlocks Qi, Dao Shrines and cultivation breakthroughs; every summit demands a minimum realm — tribulations) → <b>Chrono Frontier</b> (temporal flux: defenses swing ±40%, so strike at the ebb). Each plane also unlocks a colossal power tech. Prestige multiplies ×2 per plane cleared.</p>'+
  '<p style="margin-top:8px"><b class="gold">Pokémon World 🔴</b> adds a separate six-partner team across Kanto, Johto, Hoenn, Sinnoh and Unova. Captures raise Bond, Bond unlocks moves, duplicates yield Evolution Shards, and Bond 3 allows evolution. Pokémon power applies only in that plane; regional trials use Trainer Rating instead of army size. Legendary trials now reveal three-stage Sanctums with themed team requirements, offerings and permanent unique buffs. Clear Indigo League, reach Mt. Silver, resolve Hoenn’s weather crisis, then cross Sinnoh, survive the Distortion World, overthrow Team Plasma and master Unova’s legendary dragons.</p>'+
  '<p style="margin-top:8px"><b class="cyan">Cultivation ☯</b> lives in the Ascendant Peaks: Qi flows from its sects, breakthroughs grant huge run-wide multipliers, and <b class="cyan">magic 🔮</b> lives in the Arcane Expanse — Firestorm, Arcane Ward and Mind Fracture, with rune-costs that grow per casting.</p>'+
  '<p style="margin-top:8px"><b class="red">Prestige ⭐</b> (10+ territories) resets the run for Prestige Points: territories^1.4 × completed doctrines × 2 per plane cleared. Powerful homelands are not a bonus — they are a <b>reward</b>: each prestige unlocks two more starting tiers (T1 at first, up to T9 after four prestiges). Spend PP in the Throne Sanctum. Doctrine note: border raids never void the Bloodless Mandate — only your own assaults do.</p>'+
@@ -3400,6 +3451,7 @@ function switchTab(name){if(name==='cult'&&(!S||!cultUnlocked()))return;
 document.querySelectorAll('#tabs button').forEach(b=>{b.onclick=()=>switchTab(b.dataset.tab);});
 $('seal').addEventListener('click',()=>{if(S)doClick();});
 $('autoTgl').addEventListener('change',e=>{if(!S)return;if(S.ch&&S.ch.megaZygarde&&e.target.checked){S.chFail.megaZygarde=1;e.target.checked=false;S.auto=false;toast('Order Gauntlet failed','Automation is forbidden in this challenge.','bad');return;}S.auto=e.target.checked;});
+$('stopAssaultBtn').addEventListener('click',stopAssault);
 $('searchBox').addEventListener('input',e=>{Q=e.target.value.toLowerCase();applyFilter();});
 $('advBtn').addEventListener('click',()=>{if(S)advanceRealm();});
 $('prestigeBtn').addEventListener('click',()=>{if(S)doPrestige();});
@@ -3643,23 +3695,5 @@ window.addEventListener('online',()=>{
 
 void boot();
 </script>
-
-<script>
-(function(){
-  const banner=document.getElementById('hkdseBanner');
-  const close=document.getElementById('hkdseClose');
-  if(!banner||!close)return;
-
-  if(sessionStorage.getItem('hideHkdseBanner')==='1'){
-    banner.hidden=true;
-  }
-
-  close.addEventListener('click',function(){
-    banner.hidden=true;
-    sessionStorage.setItem('hideHkdseBanner','1');
-  });
-})();
-</script>
-
 </body>
 </html>
